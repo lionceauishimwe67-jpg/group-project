@@ -1,0 +1,97 @@
+.report-generator {
+  background: white;
+  padding: 20px;
+  border-radius: 15px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  margin-bottom: 20px;
+}
+
+.report-generator h3 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #2d3748;
+  margin-bottom: 20px;
+  font-size: 1.2rem;
+}
+
+.report-buttons {
+  display: flex;
+  gap: 15px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.report-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border: none;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.report-btn.primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.report-btn.secondary {
+  background: #f5f6fa;
+  color: #667eea;
+  border: 2px solid #667eea;
+}
+
+.report-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+}
+
+.report-preview {
+  background: #f8f9fa;
+  padding: 15px;
+  border-radius: 10px;
+}
+
+.report-preview h4 {
+  color: #2d3748;
+  margin-bottom: 15px;
+  font-size: 1rem;
+}
+
+.preview-card {
+  background: white;
+  border: 2px dashed #667eea;
+  border-radius: 10px;
+  padding: 20px;
+  text-align: center;
+}
+
+.preview-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 15px;
+}
+
+.preview-header h5 {
+  font-size: 1.1rem;
+  margin-bottom: 5px;
+}
+
+.preview-info {
+  text-align: left;
+}
+
+.preview-info p {
+  margin: 8px 0;
+  color: #4a5568;
+}
+
+.preview-info strong {
+  color: #667eea;
+}
