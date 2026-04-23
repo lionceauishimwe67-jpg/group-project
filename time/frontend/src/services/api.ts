@@ -153,6 +153,8 @@ export const authApi = {
   verify: () => api.get('/api/auth/verify'),
   changePassword: (currentPassword: string, newPassword: string) =>
     api.post('/api/auth/change-password', { currentPassword, newPassword }),
+  registerTeacher: (data: any) =>
+    api.post('/api/auth/register-teacher', data),
 };
 
 // Timetable API
@@ -161,6 +163,8 @@ export const timetableApi = {
     api.get('/api/timetable/current-sessions', { params }),
   getToday: (params?: { classId?: number; dayOfWeek?: number; level?: string }) =>
     api.get('/api/timetable/today', { params }),
+  getWeek: (params?: { classId?: number; level?: string }) =>
+    api.get('/api/timetable/week', { params }),
   getAll: (params?: { classId?: number; dayOfWeek?: number }) =>
     api.get('/api/timetable/entries', { params }),
   getById: (id: number) => api.get(`/api/timetable/entries/${id}`),
@@ -197,6 +201,18 @@ export const teachersApi = {
   create: (data: any) => api.post('/api/teachers', data),
   update: (id: number, data: any) => api.post('/api/teachers', { ...data, id }),
   delete: (id: number) => api.delete(`/api/teachers/${id}`),
+};
+
+// Notifications API
+export const notificationApi = {
+  registerDeviceToken: (data: { deviceToken: string; teacherId?: number }) =>
+    api.post('/api/notifications/device-token', data),
+  updatePreferences: (data: { notificationEnabled?: boolean; notificationAdvanceMinutes?: number }) =>
+    api.put('/api/notifications/preferences', data),
+  getPreferences: () => api.get('/api/notifications/preferences'),
+  getHistory: () => api.get('/api/notifications/history'),
+  sendTestNotification: (data: { teacherId: number }) =>
+    api.post('/api/notifications/test', data),
 };
 
 export default api;

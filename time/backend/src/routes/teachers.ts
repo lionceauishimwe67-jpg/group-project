@@ -27,15 +27,15 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
     if (id) {
       // Update existing teacher
       await query(
-        `UPDATE teachers SET name = ?, email = ?, phone = ?, school = ?, teaching_schedule = ?, subjects = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-        [name, email, phone, school, teaching_schedule, subjects, id]
+        `UPDATE teachers SET name = ?, email = ?, phone = ? WHERE id = ?`,
+        [name, email, phone, id]
       );
       res.json({ message: 'Teacher updated successfully', teacherId: id });
     } else {
       // Create new teacher
       const result = await query<{ insertId: number }>(
-        `INSERT INTO teachers (name, email, phone, school, teaching_schedule, subjects) VALUES (?, ?, ?, ?, ?, ?)`,
-        [name, email, phone, school, teaching_schedule, subjects]
+        `INSERT INTO teachers (name, email, phone) VALUES (?, ?, ?)`,
+        [name, email, phone]
       );
       res.status(201).json({ message: 'Teacher created successfully', teacherId: result.insertId });
     }

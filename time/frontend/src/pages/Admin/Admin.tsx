@@ -41,6 +41,14 @@ const Admin: React.FC = () => {
             <span className="nav-icon">📢</span>
             Announcements
           </NavLink>
+          <NavLink to="/manager" className="nav-item">
+            <span className="nav-icon">👔</span>
+            Manager Dashboard
+          </NavLink>
+          <NavLink to="/teacher/dashboard" className="nav-item">
+            <span className="nav-icon">🏫</span>
+            Teacher Dashboard
+          </NavLink>
         </nav>
 
         <div className="sidebar-footer">

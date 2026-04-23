@@ -1,5 +1,12 @@
 import { Router } from 'express';
-import { login, verifyToken, changePassword, createUser, adminSecretAuth } from '../controllers/authController';
+import {
+  login,
+  verifyToken,
+  changePassword,
+  adminSecretAuth,
+  createUser,
+  registerTeacher
+} from '../controllers/authController';
 import { authenticateToken, requireAdmin } from '../middleware/auth';
 import { loginRateLimiter } from '../middleware/rateLimiter';
 
@@ -9,6 +16,7 @@ const router = Router();
 router.post('/login', loginRateLimiter, login);
 router.post('/admin-secret', loginRateLimiter, adminSecretAuth);
 router.post('/register', loginRateLimiter, createUser);
+router.post('/register-teacher', registerTeacher);
 
 // Protected routes
 router.get('/verify', authenticateToken, verifyToken);

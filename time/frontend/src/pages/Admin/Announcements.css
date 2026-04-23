@@ -12,7 +12,7 @@
 .page-title {
   font-size: 2rem;
   font-weight: 700;
-  color: #1a1a2e;
+  color: black;
   margin: 0;
 }
 
@@ -28,7 +28,7 @@
 
 .btn-primary {
   background: #e94560;
-  color: white;
+  color: black;
 }
 
 .btn-primary:hover {
@@ -37,7 +37,7 @@
 
 .btn-secondary {
   background: #6c757d;
-  color: white;
+  color: black;
 }
 
 .btn-secondary:hover {
@@ -46,7 +46,7 @@
 
 .btn-danger {
   background: #dc3545;
-  color: white;
+  color: black;
 }
 
 .btn-danger:hover {
@@ -108,7 +108,7 @@
 
 .modal-header h2 {
   margin: 0;
-  color: #1a1a2e;
+  color: black;
 }
 
 .modal-close {
@@ -133,7 +133,7 @@
 
 .form-group label {
   font-weight: 600;
-  color: #1a1a2e;
+  color: black;
 }
 
 .form-group input {
@@ -193,12 +193,12 @@
 
 .announcement-info h3 {
   margin: 0 0 4px 0;
-  color: #1a1a2e;
+  color: black;
 }
 
 .announcement-info p {
   margin: 0;
-  color: #6c757d;
+  color: black;
   font-size: 0.9rem;
 }
 

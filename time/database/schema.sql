@@ -14,7 +14,12 @@ CREATE TABLE IF NOT EXISTS teachers (
   name VARCHAR(100) NOT NULL,
   email VARCHAR(100),
   phone VARCHAR(20),
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  device_token VARCHAR(500) COMMENT 'FCM device token for push notifications',
+  notification_enabled BOOLEAN DEFAULT TRUE COMMENT 'Enable/disable notifications for this teacher',
+  notification_advance_minutes INT DEFAULT 15 COMMENT 'Minutes before class to send notification',
+  user_id INT COMMENT 'Link to users table for teacher login',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS classrooms (
@@ -98,4 +103,22 @@ CREATE TABLE IF NOT EXISTS display_configs (
   language VARCHAR(10) DEFAULT 'en',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Notification history for tracking sent notifications
+CREATE TABLE IF NOT EXISTS notifications (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  teacher_id INT NOT NULL,
+  timetable_id INT NOT NULL COMMENT 'Reference to the timetable entry',
+  notification_type ENUM('class_reminder', 'class_start', 'emergency') DEFAULT 'class_reminder',
+  title VARCHAR(200) NOT NULL,
+  body TEXT NOT NULL,
+  sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  status ENUM('pending', 'sent', 'failed') DEFAULT 'pending',
+  error_message TEXT,
+  FOREIGN KEY (teacher_id) REFERENCES teachers(id) ON DELETE CASCADE,
+  FOREIGN KEY (timetable_id) REFERENCES timetable(id) ON DELETE CASCADE,
+  INDEX idx_teacher (teacher_id),
+  INDEX idx_sent_at (sent_at),
+  INDEX idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

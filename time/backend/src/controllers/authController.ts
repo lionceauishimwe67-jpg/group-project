@@ -252,3 +252,100 @@ export const createUser = asyncHandler(async (req: Request, res: Response) => {
     throw error;
   }
 });
+
+// Teacher registration
+export const registerTeacher = asyncHandler(async (req: Request, res: Response) => {
+  const { username, password, teacherId, email, phone } = req.body;
+
+  if (!username || !password || !teacherId) {
+    return res.status(400).json({
+      success: false,
+      error: 'Username, password, and teacher ID are required'
+    });
+  }
+
+  // Check if teacher exists
+  const teachers = await query<any[]>('SELECT * FROM teachers WHERE id = ?', [teacherId]);
+  
+  if (teachers.length === 0) {
+    return res.status(404).json({
+      success: false,
+      error: 'Teacher not found'
+    });
+  }
+
+  const teacher = teachers[0];
+
+  // Check if teacher is already registered
+  if (teacher.user_id) {
+    return res.status(400).json({
+      success: false,
+      error: 'This teacher is already registered'
+    });
+  }
+
+  // Password requirements
+  if (password.length < 8) {
+    return res.status(400).json({
+      success: false,
+      error: 'Password must be at least 8 characters'
+    });
+  }
+
+  // Hash password
+  const passwordHash = await bcrypt.hash(password, 10);
+
+  try {
+    // Create user with teacher role
+    const userResult = await query<{ insertId: number }>(
+      'INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)',
+      [username, passwordHash, 'teacher']
+    );
+
+    const userId = userResult.insertId;
+
+    // Link user to teacher
+    await query('UPDATE teachers SET user_id = ?, email = ?, phone = ? WHERE id = ?', [
+      userId,
+      email || teacher.email,
+      phone || teacher.phone,
+      teacherId
+    ]);
+
+    // Generate JWT token
+    const secret = process.env.JWT_SECRET || 'default-secret';
+    const token = jwt.sign(
+      {
+        userId: userId,
+        username: username,
+        role: 'teacher',
+        teacherId: teacherId
+      },
+      secret,
+      { expiresIn: '24h' }
+    );
+
+    return res.status(201).json({
+      success: true,
+      data: {
+        token,
+        user: {
+          id: userId,
+          username,
+          role: 'teacher',
+          teacherId,
+          teacherName: teacher.name
+        }
+      },
+      message: 'Teacher registered successfully'
+    });
+  } catch (error: any) {
+    if (error.code === 'SQLITE_CONSTRAINT' || error.message?.includes('UNIQUE constraint')) {
+      return res.status(409).json({
+        success: false,
+        error: 'Username already exists'
+      });
+    }
+    throw error;
+  }
+});

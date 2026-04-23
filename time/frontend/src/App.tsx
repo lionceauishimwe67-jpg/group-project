@@ -12,6 +12,12 @@ import Dashboard from './pages/Admin/Dashboard';
 import TimetableManager from './pages/Admin/TimetableManager';
 import AnnouncementsManager from './pages/Admin/AnnouncementsManager';
 import TeacherProfile from './pages/Admin/TeacherProfile';
+import TeacherNotificationSetup from './pages/Teacher/TeacherNotificationSetup';
+import ManagerDashboard from './pages/Manager/ManagerDashboard';
+import TeacherDashboard from './pages/Teacher/TeacherDashboard';
+
+// Components
+import { ToastProvider } from './components/ToastNotification';
 
 // Protected route component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -46,8 +52,9 @@ const SecretLoginWrapper: React.FC = () => {
 const App: React.FC = () => {
   return (
     <ErrorBoundary>
-      <AuthProvider>
-        <Router future={{ v7_relativeSplatPath: true }}>
+      <ToastProvider>
+        <AuthProvider>
+          <Router future={{ v7_relativeSplatPath: true }}>
           <Routes>
             {/* Public Display Route */}
             <Route path="/display" element={<Display />} />
@@ -72,12 +79,22 @@ const App: React.FC = () => {
             <Route path="announcements" element={<AnnouncementsManager />} />
           </Route>
 
+          {/* Teacher Notification Setup (public for teachers to register) */}
+          <Route path="/teacher/notifications" element={<TeacherNotificationSetup />} />
+
+          {/* Manager Dashboard (protected) */}
+          <Route path="/manager" element={<ProtectedRoute><ManagerDashboard /></ProtectedRoute>} />
+
+          {/* Teacher Dashboard (protected) */}
+          <Route path="/teacher/dashboard" element={<ProtectedRoute><TeacherDashboard /></ProtectedRoute>} />
+
           {/* Default redirect */}
           <Route path="/" element={<Navigate to="/display" replace />} />
           <Route path="*" element={<Navigate to="/display" replace />} />
         </Routes>
       </Router>
     </AuthProvider>
+    </ToastProvider>
   </ErrorBoundary>
   );
 };

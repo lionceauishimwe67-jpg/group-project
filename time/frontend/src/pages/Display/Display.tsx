@@ -55,8 +55,8 @@ const Display: React.FC<DisplayProps> = ({
     const minutes = now.getMinutes();
     const timeMinutes = hours * 60 + minutes;
 
-    // First Lunch Break: 10:10 AM - 10:30 AM (610 - 630 minutes)
-    if (timeMinutes >= 610 && timeMinutes < 630) {
+    // Morning Break: 10:10 AM - 10:25 AM (610 - 625 minutes)
+    if (timeMinutes >= 610 && timeMinutes < 625) {
       return 'first-lunch';
     }
 
@@ -141,11 +141,17 @@ const Display: React.FC<DisplayProps> = ({
     if (filterClassId) params.classId = filterClassId;
     if (filterLevel) params.level = filterLevel;
 
-    params.dayOfWeek = selectedDay;
-
-    const response = await timetableApi.getToday(params);
-    return response.data.data;
-  }, [filterClassId, filterLevel, selectedDay]);
+    if (viewMode === 'week') {
+      // Fetch weekly data
+      const response = await timetableApi.getWeek(params);
+      return response.data.data;
+    } else {
+      // Fetch single day data
+      params.dayOfWeek = selectedDay;
+      const response = await timetableApi.getToday(params);
+      return response.data.data;
+    }
+  }, [filterClassId, filterLevel, selectedDay, viewMode]);
 
   const {
     data: sessions,
@@ -202,21 +208,67 @@ const Display: React.FC<DisplayProps> = ({
   const timetableGrid = useMemo(() => {
     if (!sessions || sessions.length === 0) return { timeSlots: [], classes: [], grid: {} };
 
-    // Get unique classes sorted by name
-    const classes = [...new Set(sessions.map(s => s.class_name))].sort();
+    // Define time slot order from Excel file
+    const timeSlotOrder = [
+      "7:50'-8:10'",
+      "8:10-8:50",
+      "8:50-9:30",
+      "9:30-10:10",
+      "10:10-10:25",
+      "10:25-11:05",
+      "11:05-11:45",
+      "11:45-12:25",
+      "12:25-13:30",
+      "13:30-14:10",
+      "14:10-14:50",
+      "14:50-15:30",
+      "15:30-15:40",
+      "15:40-16:20",
+      "16:20-17:00"
+    ];
 
-    // Get unique time slots sorted by start_time
-    const timeSlotKeys = [...new Set(sessions.map(s => `${s.start_time}-${s.end_time}`))].sort();
+    // Handle weekly data structure (object with day keys)
+    if (viewMode === 'week' && typeof sessions === 'object' && !Array.isArray(sessions)) {
+      // Flatten weekly data into array with proper typing
+      const weeklySessions = sessions as Record<number, TimetableEntry[]>;
+      const allEntries = Object.values(weeklySessions).flat() as TimetableEntry[];
+
+      // Get unique classes sorted by name
+      const classes = [...new Set(allEntries.map(s => s.class_name))].sort();
+
+      // Get unique time slots in the defined order
+      const allTimeSlots = [...new Set(allEntries.map(s => `${s.start_time}-${s.end_time}`))];
+      const timeSlotKeys = timeSlotOrder.filter(slot => allTimeSlots.includes(slot));
+
+      // Build grid: key = "startTime-endTime|className|dayOfWeek" -> entry
+      const grid: Record<string, TimetableEntry> = {};
+      allEntries.forEach(entry => {
+        const key = `${entry.start_time}-${entry.end_time}|${entry.class_name}|${entry.day_of_week}`;
+        grid[key] = entry;
+      });
+
+      return { timeSlots: timeSlotKeys, classes, grid };
+    }
+
+    // Handle single day data structure (array)
+    const sessionsArray = Array.isArray(sessions) ? sessions : [];
+
+    // Get unique classes sorted by name
+    const classes = [...new Set(sessionsArray.map(s => s.class_name))].sort();
+
+    // Get unique time slots in the defined order
+    const allTimeSlots = [...new Set(sessionsArray.map(s => `${s.start_time}-${s.end_time}`))];
+    const timeSlotKeys = timeSlotOrder.filter(slot => allTimeSlots.includes(slot));
 
     // Build grid: key = "startTime-endTime|className" -> entry
     const grid: Record<string, TimetableEntry> = {};
-    sessions.forEach(entry => {
+    sessionsArray.forEach(entry => {
       const key = `${entry.start_time}-${entry.end_time}|${entry.class_name}`;
       grid[key] = entry;
     });
 
     return { timeSlots: timeSlotKeys, classes, grid };
-  }, [sessions]);
+  }, [sessions, viewMode]);
 
   // Check if a session is currently happening
   const isCurrentSession = (startTime: string, endTime: string) => {
@@ -227,7 +279,22 @@ const Display: React.FC<DisplayProps> = ({
 
   // Get current session for real-time display
   const getCurrentSession = () => {
-    if (!sessions || sessions.length === 0) return null;
+    if (!sessions) return null;
+    
+    // Handle weekly data (object)
+    if (typeof sessions === 'object' && !Array.isArray(sessions)) {
+      const weeklySessions = sessions as Record<number, TimetableEntry[]>;
+      const today = new Date().getDay();
+      const todaySessions = weeklySessions[today] || [];
+      
+      if (todaySessions.length === 0) return null;
+      const now = new Date();
+      const timeStr = now.toTimeString().slice(0, 5);
+      return todaySessions.find(s => timeStr >= s.start_time && timeStr <= s.end_time) || null;
+    }
+    
+    // Handle single day data (array)
+    if (Array.isArray(sessions) && sessions.length === 0) return null;
     const now = new Date();
     const timeStr = now.toTimeString().slice(0, 5);
     return sessions.find(s => timeStr >= s.start_time && timeStr <= s.end_time) || null;
@@ -237,7 +304,25 @@ const Display: React.FC<DisplayProps> = ({
 
   // Get next session
   const getNextSession = () => {
-    if (!sessions || sessions.length === 0) return null;
+    if (!sessions) return null;
+    
+    // Handle weekly data (object)
+    if (typeof sessions === 'object' && !Array.isArray(sessions)) {
+      const weeklySessions = sessions as Record<number, TimetableEntry[]>;
+      const today = new Date().getDay();
+      const todaySessions = weeklySessions[today] || [];
+      
+      if (todaySessions.length === 0) return null;
+      const now = new Date();
+      const timeStr = now.toTimeString().slice(0, 5);
+      const futureSessions = todaySessions
+        .filter(s => s.start_time > timeStr)
+        .sort((a, b) => a.start_time.localeCompare(b.start_time));
+      return futureSessions[0] || null;
+    }
+    
+    // Handle single day data (array)
+    if (Array.isArray(sessions) && sessions.length === 0) return null;
     const now = new Date();
     const timeStr = now.toTimeString().slice(0, 5);
     const futureSessions = sessions
@@ -308,22 +393,28 @@ const Display: React.FC<DisplayProps> = ({
             <div className="display-time">{formatTime}</div>
             <div className="day-navigation">
               <button
-                className={`day-btn ${selectedDay === new Date().getDay() ? 'active' : ''}`}
-                onClick={() => setSelectedDay(new Date().getDay())}
+                className={`day-btn ${selectedDay === new Date().getDay() && viewMode === 'day' ? 'active' : ''}`}
+                onClick={() => {
+                  setSelectedDay(new Date().getDay());
+                  setViewMode('day');
+                }}
               >
                 Today
               </button>
               <button
-                className={`day-btn ${selectedDay === (new Date().getDay() + 1) % 7 ? 'active' : ''}`}
-                onClick={() => setSelectedDay((new Date().getDay() + 1) % 7)}
+                className={`day-btn ${selectedDay === (new Date().getDay() + 1) % 7 && viewMode === 'day' ? 'active' : ''}`}
+                onClick={() => {
+                  setSelectedDay((new Date().getDay() + 1) % 7);
+                  setViewMode('day');
+                }}
               >
                 Tomorrow
               </button>
               <button
                 className={`day-btn ${viewMode === 'week' ? 'active' : ''}`}
-                onClick={() => setViewMode(viewMode === 'week' ? 'day' : 'week')}
+                onClick={() => setViewMode('week')}
               >
-                {viewMode === 'week' ? 'Day' : 'Week'}
+                Week
               </button>
             </div>
             {nextSession && selectedDay === new Date().getDay() && (
@@ -343,16 +434,16 @@ const Display: React.FC<DisplayProps> = ({
             <div className="no-sessions-icon">{schedulePeriod === 'etude' ? '�' : '☕'}</div>
             {schedulePeriod === 'first-lunch' && (
               <>
-                <p className="no-sessions-text">First Lunch Break</p>
+                <p className="no-sessions-text">Morning Break</p>
                 <div className="schedule-info">
                   <div className="schedule-row">
                     <span className="schedule-label">Time:</span>
-                    <span className="schedule-time">10:10 AM - 10:30 AM</span>
+                    <span className="schedule-time">10:10 AM - 10:25 AM</span>
                   </div>
                 </div>
                 <div className="etude-countdown">
                   <div className="countdown-label">Break ends in:</div>
-                  <div className="countdown-timer">{getBreakCountdown(currentTime, 10, 30)}</div>
+                  <div className="countdown-timer">{getBreakCountdown(currentTime, 10, 25)}</div>
                 </div>
               </>
             )}
@@ -425,8 +516,8 @@ const Display: React.FC<DisplayProps> = ({
                 <p className="no-sessions-text">No Sessions Scheduled</p>
                 <div className="schedule-info">
                   <div className="schedule-row">
-                    <span className="schedule-label">First Lunch:</span>
-                    <span className="schedule-time">10:10 AM - 10:30 AM</span>
+                    <span className="schedule-label">Morning Break:</span>
+                    <span className="schedule-time">10:10 AM - 10:25 AM</span>
                   </div>
                   <div className="schedule-row">
                     <span className="schedule-label">Lunch Break:</span>
@@ -452,8 +543,8 @@ const Display: React.FC<DisplayProps> = ({
                 <p className="no-sessions-text">No Sessions Scheduled</p>
                 <div className="schedule-info">
                   <div className="schedule-row">
-                    <span className="schedule-label">First Lunch:</span>
-                    <span className="schedule-time">10:10 AM - 10:30 AM</span>
+                    <span className="schedule-label">Morning Break:</span>
+                    <span className="schedule-time">10:10 AM - 10:25 AM</span>
                   </div>
                   <div className="schedule-row">
                     <span className="schedule-label">Lunch Break:</span>
@@ -493,7 +584,114 @@ const Display: React.FC<DisplayProps> = ({
         ) : (
           <>
             {/* Show full timetable with columns and rows */}
-            {timetableGrid.classes.length > 0 && timetableGrid.timeSlots.length > 0 ? (
+            {viewMode === 'week' ? (
+              // Weekly view
+              <div className="weekly-timetable-wrapper">
+                {!sessions || typeof sessions !== 'object' || Array.isArray(sessions) ? (
+                  <div className="no-sessions">
+                    <div className="no-sessions-icon">📚</div>
+                    <p className="no-sessions-text">No weekly data available</p>
+                  </div>
+                ) : (
+                  Object.entries(sessions as unknown as Record<number, TimetableEntry[]>).map(([day, daySessions]) => {
+                    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                    const dayNum = parseInt(day);
+
+                    // Ensure daySessions is an array
+                    const daySessionsArray = Array.isArray(daySessions) ? daySessions : [];
+
+                    // Define time slot order from Excel file
+                    const timeSlotOrder = [
+                      "7:50'-8:10'",
+                      "8:10-8:50",
+                      "8:50-9:30",
+                      "9:30-10:10",
+                      "10:10-10:25",
+                      "10:25-11:05",
+                      "11:05-11:45",
+                      "11:45-12:25",
+                      "12:25-13:30",
+                      "13:30-14:10",
+                      "14:10-14:50",
+                      "14:50-15:30",
+                      "15:30-15:40",
+                      "15:40-16:20",
+                      "16:20-17:00"
+                    ];
+
+                    // Build grid for this day
+                    const classes = [...new Set(daySessionsArray.map(s => s.class_name))].sort();
+                    const allTimeSlots = [...new Set(daySessionsArray.map(s => `${s.start_time}-${s.end_time}`))];
+                    const timeSlotKeys = timeSlotOrder.filter(slot => allTimeSlots.includes(slot));
+                    const grid: Record<string, TimetableEntry> = {};
+                    daySessionsArray.forEach(entry => {
+                      const key = `${entry.start_time}-${entry.end_time}|${entry.class_name}`;
+                      grid[key] = entry;
+                    });
+
+                    if (daySessionsArray.length === 0) return null;
+
+                    return (
+                      <div key={day} className="day-section">
+                        <h3 className="day-title">{dayNames[dayNum]}</h3>
+                        <div className="timetable-table-wrapper">
+                          <table className="timetable-table">
+                            <thead>
+                              <tr>
+                                <th className="time-header">TIME</th>
+                                {classes.map(cls => (
+                                  <th key={cls} className="class-header">{cls}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {timeSlotKeys.map(slot => {
+                                const [start, end] = slot.split('-');
+                                return (
+                                  <tr key={slot}>
+                                    <td className="time-cell">
+                                      <span className="time-range">{start}</span>
+                                      <span className="time-sep">-</span>
+                                      <span className="time-range">{end}</span>
+                                    </td>
+                                    {classes.map(cls => {
+                                      const key = `${slot}|${cls}`;
+                                      const entry = grid[key];
+                                      const subjectColor = entry ? getSubjectColor(entry.subject_name) : 'transparent';
+                                      const hasTeacher = entry && entry.teacher_name && entry.teacher_name !== 'null';
+                                      // Check if teacher is currently scheduled (within time slot)
+                                      const [start, end] = slot.split('-');
+                                      const isTeacherScheduled = hasTeacher && isCurrentSession(start, end);
+                                      return (
+                                        <td key={cls} className={`cell ${entry ? 'has-session' : 'empty'} ${hasTeacher ? 'has-teacher' : 'no-teacher'}`} style={{ backgroundColor: entry ? subjectColor : 'transparent' }}>
+                                          {entry ? (
+                                            <div className="cell-content">
+                                              <div className="cell-subject">{entry.subject_name}</div>
+                                              <div className="cell-teacher">
+                                                {entry.teacher_name || 'No Teacher'}
+                                                {isTeacherScheduled && <span className="teacher-indicator active">✓</span>}
+                                              </div>
+                                              <div className="cell-room">{entry.classroom_name}</div>
+                                            </div>
+                                          ) : (
+                                            <div className="cell-empty">-</div>
+                                          )}
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            ) : timetableGrid.classes.length > 0 && timetableGrid.timeSlots.length > 0 ? (
+              // Single day view
               <div className="timetable-table-wrapper">
                 <table className="timetable-table">
                   <thead>
@@ -520,12 +718,18 @@ const Display: React.FC<DisplayProps> = ({
                             const key = `${slot}|${cls}`;
                             const entry = timetableGrid.grid[key];
                             const subjectColor = entry ? getSubjectColor(entry.subject_name) : 'transparent';
+                            const hasTeacher = entry && entry.teacher_name && entry.teacher_name !== 'null';
+                            // Check if teacher is currently scheduled (within time slot)
+                            const isTeacherScheduled = hasTeacher && isCurrentSession(start, end);
                             return (
-                              <td key={cls} className={`cell ${isCurrent ? 'current-cell' : ''} ${entry ? 'has-session' : 'empty'}`} style={{ backgroundColor: entry ? subjectColor : 'transparent' }}>
+                              <td key={cls} className={`cell ${isCurrent ? 'current-cell' : ''} ${entry ? 'has-session' : 'empty'} ${hasTeacher ? 'has-teacher' : 'no-teacher'}`} style={{ backgroundColor: entry ? subjectColor : 'transparent' }}>
                                 {entry ? (
                                   <div className="cell-content">
                                     <div className="cell-subject">{entry.subject_name}</div>
-                                    <div className="cell-teacher">{entry.teacher_name}</div>
+                                    <div className="cell-teacher">
+                                      {entry.teacher_name || 'No Teacher'}
+                                      {isTeacherScheduled && <span className="teacher-indicator active">✓</span>}
+                                    </div>
                                     <div className="cell-room">{entry.classroom_name}</div>
                                   </div>
                                 ) : (

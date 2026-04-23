@@ -584,3 +584,84 @@ export const getReferenceData = asyncHandler(async (req: Request, res: Response)
     }
   });
 });
+
+// Get weekly timetable
+export const getWeeklyTimetable = asyncHandler(async (req: Request, res: Response) => {
+  const { classId, level } = req.query;
+
+  let sql = `
+    SELECT 
+      t.id,
+      t.class_id,
+      c.name AS class_name,
+      t.subject_id,
+      s.name AS subject_name,
+      t.teacher_id,
+      te.name AS teacher_name,
+      t.classroom_id,
+      cl.name AS classroom_name,
+      substr(t.start_time, 1, 5) AS start_time,
+      substr(t.end_time, 1, 5) AS end_time,
+      t.day_of_week,
+      t.is_temporary,
+      t.temporary_date,
+      t.is_active,
+      t.created_at,
+      t.updated_at
+    FROM timetable t
+    JOIN classes c ON t.class_id = c.id
+    JOIN subjects s ON t.subject_id = s.id
+    JOIN teachers te ON t.teacher_id = te.id
+    JOIN classrooms cl ON t.classroom_id = cl.id
+    WHERE t.is_active = 1
+      AND (
+        -- Regular session (not temporary)
+        (t.is_temporary = 0)
+        OR
+        -- Temporary session for today
+        (t.is_temporary = 1 AND t.temporary_date = date('now'))
+      )
+  `;
+
+  const params: any[] = [];
+
+  // Add filtering
+  if (classId) {
+    sql += ' AND t.class_id = ?';
+    params.push(classId);
+  }
+
+  if (level) {
+    sql += ' AND c.level = ?';
+    params.push(level);
+  }
+
+  sql += ' ORDER BY t.day_of_week, t.start_time, c.name';
+
+  const entries = await query<TimetableEntryWithDetails[]>(sql, params);
+
+  // Group by day of week
+  const weeklyData: Record<number, TimetableEntryWithDetails[]> = {
+    0: [], // Sunday
+    1: [], // Monday
+    2: [], // Tuesday
+    3: [], // Wednesday
+    4: [], // Thursday
+    5: [], // Friday
+    6: []  // Saturday
+  };
+
+  entries.forEach(entry => {
+    if (weeklyData[entry.day_of_week]) {
+      weeklyData[entry.day_of_week].push(entry);
+    }
+  });
+
+  return res.json({
+    success: true,
+    data: weeklyData,
+    meta: {
+      count: entries.length
+    }
+  });
+});

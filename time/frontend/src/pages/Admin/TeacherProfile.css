@@ -1,8 +1,8 @@
 .teacher-profile {
   padding: 24px;
-  background: linear-gradient(135deg, #0a1628 0%, #1a2d4a 100%);
+  background: linear-gradient(135deg, #e8f4fc 0%, #f0f7ff 50%, #f8fbff 100%);
   min-height: 100vh;
-  color: #fff;
+  color: black;
 }
 
 .teacher-profile-header {
@@ -21,7 +21,7 @@
 
 .status {
   font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.7);
+  color: black;
   margin: 0;
 }
 
@@ -42,9 +42,9 @@
   justify-content: space-between;
   align-items: center;
   padding: 16px;
-  background: rgba(0, 0, 0, 0.2);
+  background: white;
   border-radius: 12px;
-  border: 1px solid rgba(0, 212, 255, 0.15);
+  border: 2px solid rgba(25, 118, 210, 0.15);
 }
 
 .list-header h3 {
@@ -78,9 +78,9 @@
 }
 
 .teacher-card {
-  background: rgba(0, 0, 0, 0.2);
+  background: white;
   border-radius: 12px;
-  border: 1px solid rgba(0, 212, 255, 0.15);
+  border: 2px solid rgba(25, 118, 210, 0.15);
   padding: 16px;
   transition: all 0.3s ease;
 }
@@ -100,7 +100,7 @@
 
 .teacher-info p {
   font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.8);
+  color:black;
   margin: 4px 0;
 }
 
@@ -130,7 +130,7 @@
 
 .teacher-actions button.delete {
   background: rgba(239, 68, 68, 0.2);
-  color: #ef4444;
+  color: black;
 }
 
 .teacher-actions button.delete:hover {
@@ -138,9 +138,9 @@
 }
 
 .teacher-form {
-  background: rgba(0, 0, 0, 0.2);
+  background: white;
   border-radius: 12px;
-  border: 1px solid rgba(0, 212, 255, 0.15);
+  border: 2px solid rgba(25, 118, 210, 0.15);
   padding: 24px;
   position: sticky;
   top: 24px;
@@ -149,7 +149,7 @@
 .teacher-form h3 {
   font-size: 1.5rem;
   font-weight: 700;
-  color: #00d4ff;
+  color: black;
   margin: 0 0 24px 0;
 }
 
@@ -161,7 +161,7 @@
   display: block;
   font-size: 0.9rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.8);
+  color: black;
   margin-bottom: 8px;
 }
 
@@ -169,10 +169,10 @@
 .form-group textarea {
   width: 100%;
   padding: 12px;
-  border: 1px solid rgba(0, 212, 255, 0.3);
+  border: 2px solid #e0e0e0;
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.3);
-  color: #fff;
+  background: white;
+  color: black;
   font-size: 0.95rem;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   transition: all 0.3s ease;
@@ -209,7 +209,7 @@
 
 .form-actions button[type="submit"] {
   background: linear-gradient(135deg, #00d4ff 0%, #00ffcc 100%);
-  color: #0a1628;
+  color: black;
 }
 
 .form-actions button[type="submit"]:hover:not(:disabled) {
@@ -224,7 +224,7 @@
 
 .form-actions button.cancel {
   background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  color: black;
 }
 
 .form-actions button.cancel:hover {
@@ -255,8 +255,8 @@
 }
 
 .delete-confirm-content {
-  background: linear-gradient(135deg, #1a2d4a 0%, #0a1628 100%);
-  border: 1px solid rgba(0, 212, 255, 0.3);
+  background: white;
+  border: 2px solid rgba(25, 118, 210, 0.15);
   border-radius: 12px;
   padding: 24px;
   max-width: 400px;
@@ -278,13 +278,13 @@
 .delete-confirm-content h3 {
   font-size: 1.3rem;
   font-weight: 700;
-  color: #ef4444;
+  color: black;
   margin: 0 0 12px 0;
 }
 
 .delete-confirm-content p {
   font-size: 0.95rem;
-  color: rgba(255, 255, 255, 0.8);
+  color: black;
   margin: 0 0 20px 0;
   line-height: 1.5;
 }
@@ -307,7 +307,7 @@
 
 .delete-confirm-actions button.cancel {
   background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  color: black;
 }
 
 .delete-confirm-actions button.cancel:hover {
@@ -316,7 +316,7 @@
 
 .delete-confirm-actions button.delete {
   background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-  color: #fff;
+  color:black;
 }
 
 .delete-confirm-actions button.delete:hover {

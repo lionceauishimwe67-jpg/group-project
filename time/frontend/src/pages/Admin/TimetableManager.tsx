@@ -12,6 +12,7 @@ const TimetableManager: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<TimetableEntry | null>(null);
   const [status, setStatus] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Form state
   const [formData, setFormData] = useState({
@@ -187,6 +188,21 @@ const TimetableManager: React.FC = () => {
     return acc;
   }, {} as Record<string, Class[]>) || {};
 
+  // Filter entries based on search query
+  const filteredEntries = entries.filter(entry => {
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      entry.class_name.toLowerCase().includes(query) ||
+      entry.subject_name.toLowerCase().includes(query) ||
+      entry.teacher_name.toLowerCase().includes(query) ||
+      entry.classroom_name.toLowerCase().includes(query) ||
+      daysOfWeek.find(d => d.value === entry.day_of_week)?.label.toLowerCase().includes(query) ||
+      entry.start_time.includes(query) ||
+      entry.end_time.includes(query)
+    );
+  });
+
   if (loading) return <div style={{ padding: 40 }}>Loading...</div>;
 
   return (
@@ -199,7 +215,15 @@ const TimetableManager: React.FC = () => {
       <div className="timetable-manager-content">
         <div className="timetable-list">
           <div className="list-header">
-            <h3>Timetable Entries ({entries.length})</h3>
+            <h3>Timetable Entries ({filteredEntries.length})</h3>
+            <input
+              type="text"
+              className="search-input"
+              placeholder="Search by class, subject, teacher, room, day, or time..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{ width: '300px', padding: '8px 12px', borderRadius: '8px', border: '1px solid #ddd' }}
+            />
             <select
               className="form-control"
               value={selectedClass}
@@ -221,7 +245,7 @@ const TimetableManager: React.FC = () => {
           </div>
 
           <div className="timetable-grid">
-            {entries.map((entry) => (
+            {filteredEntries.map((entry) => (
               <div key={entry.id} className="timetable-card">
                 <div className="timetable-info">
                   <h4>{entry.class_name} - {entry.subject_name}</h4>
@@ -245,9 +269,9 @@ const TimetableManager: React.FC = () => {
             ))}
           </div>
 
-          {entries.length === 0 && (
+          {filteredEntries.length === 0 && (
             <div style={{ textAlign: 'center', padding: 40, color: '#9ca3af' }}>
-              No timetable entries found. Click "Add Entry" to create one.
+              {searchQuery ? 'No entries match your search.' : 'No timetable entries found. Click "Add Entry" to create one.'}
             </div>
           )}
         </div>

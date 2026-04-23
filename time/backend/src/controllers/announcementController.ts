@@ -29,7 +29,7 @@ export const getAnnouncements = asyncHandler(async (req: Request, res: Response)
     image_url: ann.image_path 
       ? (ann.image_path.startsWith('http://') || ann.image_path.startsWith('https://') 
           ? ann.image_path 
-          : `${baseUrl}/${ann.image_path.replace(/\\/g, '/')}`)
+          : `${baseUrl}/api/announcements/file/${(ann.image_path || '').split('/').pop()}`)
       : null
   }));
 
@@ -78,7 +78,7 @@ export const getAllAnnouncements = asyncHandler(async (req: Request, res: Respon
     image_url: ann.image_path 
       ? (ann.image_path.startsWith('http://') || ann.image_path.startsWith('https://') 
           ? ann.image_path 
-          : `${baseUrl}/${ann.image_path.replace(/\\/g, '/')}`)
+          : `${baseUrl}/api/announcements/file/${(ann.image_path || '').split('/').pop()}`)
       : null
   }));
 
@@ -124,7 +124,7 @@ export const getAnnouncement = asyncHandler(async (req: Request, res: Response) 
       image_url: announcements[0].image_path 
         ? (announcements[0].image_path.startsWith('http://') || announcements[0].image_path.startsWith('https://') 
             ? announcements[0].image_path 
-            : `${baseUrl}/${announcements[0].image_path.replace(/\\/g, '/')}`)
+            : `${baseUrl}/${(announcements[0].image_path || '').replace(/\\/g, '/')}`)
         : null
     }
   });
@@ -147,9 +147,9 @@ export const createAnnouncement = asyncHandler(async (req: Request, res: Respons
 
   let imagePath = image_url;
   
-  // If file uploaded, use file path
+  // If file uploaded, use relative path
   if (req.file) {
-    imagePath = req.file.path.replace(/\\/g, '/'); // Normalize path for Windows
+    imagePath = `uploads/announcements/${req.file.filename}`; // Store relative path
   } else if (local_path) {
     // Handle local file path - copy file to uploads directory
     try {
@@ -166,7 +166,7 @@ export const createAnnouncement = asyncHandler(async (req: Request, res: Respons
       
       // Copy file from local path to uploads directory
       fs.copyFileSync(sourcePath, destPath);
-      imagePath = destPath.replace(/\\/g, '/');
+      imagePath = `uploads/announcements/${destFileName}`; // Store relative path
     } catch (err) {
       console.error('Failed to copy local file:', err);
       return res.status(400).json({
@@ -190,7 +190,7 @@ export const createAnnouncement = asyncHandler(async (req: Request, res: Respons
       id: result.insertId,
       title,
       image_path: imagePath,
-      image_url: `${baseUrl}/${imagePath.replace(/\\/g, '/')}`,
+      image_url: imagePath ? `${baseUrl}/api/announcements/file/${(imagePath || '').split('/').pop()}` : null,
       display_order,
       expires_at
     },
@@ -244,16 +244,21 @@ export const updateAnnouncement = asyncHandler(async (req: Request, res: Respons
 
   // Handle image update
   if (req.file) {
-    const newImagePath = req.file.path.replace(/\\/g, '/');
+    const newImagePath = `uploads/announcements/${req.file.filename}`; // Store relative path
     updateFields.push('image_path = ?');
     values.push(newImagePath);
 
-    // Delete old image
-    if (oldImagePath && fs.existsSync(oldImagePath)) {
-      try {
-        fs.unlinkSync(oldImagePath);
-      } catch (err) {
-        console.error('Failed to delete old image:', err);
+    // Delete old image (convert relative path to absolute for deletion)
+    if (oldImagePath) {
+      const oldAbsolutePath = oldImagePath.startsWith('uploads/') 
+        ? path.join(process.cwd(), (oldImagePath || '').replace(/\//g, path.sep))
+        : oldImagePath;
+      if (fs.existsSync(oldAbsolutePath)) {
+        try {
+          fs.unlinkSync(oldAbsolutePath);
+        } catch (err) {
+          console.error('Failed to delete old image:', err);
+        }
       }
     }
   } else if (local_path) {
@@ -272,17 +277,22 @@ export const updateAnnouncement = asyncHandler(async (req: Request, res: Respons
       
       // Copy file from local path to uploads directory
       fs.copyFileSync(sourcePath, destPath);
-      const newImagePath = destPath.replace(/\\/g, '/');
+      const newImagePath = `uploads/announcements/${destFileName}`; // Store relative path
       
       updateFields.push('image_path = ?');
       values.push(newImagePath);
       
-      // Delete old image
-      if (oldImagePath && fs.existsSync(oldImagePath)) {
-        try {
-          fs.unlinkSync(oldImagePath);
-        } catch (err) {
-          console.error('Failed to delete old image:', err);
+      // Delete old image (convert relative path to absolute for deletion)
+      if (oldImagePath) {
+        const oldAbsolutePath = oldImagePath.startsWith('uploads/') 
+          ? path.join(process.cwd(), (oldImagePath || '').replace(/\//g, path.sep))
+          : oldImagePath;
+        if (fs.existsSync(oldAbsolutePath)) {
+          try {
+            fs.unlinkSync(oldAbsolutePath);
+          } catch (err) {
+            console.error('Failed to delete old image:', err);
+          }
         }
       }
     } catch (err) {
@@ -322,7 +332,7 @@ export const updateAnnouncement = asyncHandler(async (req: Request, res: Respons
     success: true,
     data: {
       ...updated[0],
-      image_url: `${baseUrl}/${updated[0].image_path.replace(/\\/g, '/')}`
+      image_url: updated[0].image_path ? `${baseUrl}/api/announcements/file/${(updated[0].image_path || '').split('/').pop()}` : null
     },
     message: 'Announcement updated successfully'
   });
@@ -344,12 +354,18 @@ export const deleteAnnouncement = asyncHandler(async (req: Request, res: Respons
 
   const imagePath = existing[0].image_path;
 
-  // Delete image file
-  if (imagePath && fs.existsSync(imagePath)) {
-    try {
-      fs.unlinkSync(imagePath);
-    } catch (err) {
-      console.error('Failed to delete image file:', err);
+  // Delete image file (convert relative path to absolute for deletion)
+  if (imagePath) {
+    const absolutePath = imagePath.startsWith('uploads/') 
+      ? path.join(process.cwd(), (imagePath || '').replace(/\//g, path.sep))
+      : imagePath;
+    
+    if (fs.existsSync(absolutePath)) {
+      try {
+        fs.unlinkSync(absolutePath);
+      } catch (err) {
+        console.error('Failed to delete image file:', err);
+      }
     }
   }
 
@@ -398,7 +414,7 @@ export const getAvailableImages = asyncHandler(async (req: Request, res: Respons
   }
 
   const files = fs.readdirSync(uploadDir);
-  const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+  const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg', '.ico', '.tiff', '.tif', '.avif', '.heic', '.heif'];
   
   const images = files
     .filter(file => {

@@ -27,6 +27,7 @@ const TeacherProfile: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [status, setStatus] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<{ show: boolean; teacherId: number | null }>({ show: false, teacherId: null });
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     fetchTeachers();
@@ -132,6 +133,19 @@ const TeacherProfile: React.FC = () => {
     setStatus('Cancelled');
   };
 
+  // Filter teachers based on search query
+  const filteredTeachers = teachers.filter(teacher => {
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      teacher.name.toLowerCase().includes(query) ||
+      (teacher.email && teacher.email.toLowerCase().includes(query)) ||
+      (teacher.phone && teacher.phone.includes(query)) ||
+      (teacher.school && teacher.school.toLowerCase().includes(query)) ||
+      (teacher.subjects && teacher.subjects.toLowerCase().includes(query))
+    );
+  });
+
   return (
     <div className="teacher-profile">
       <div className="teacher-profile-header">
@@ -142,14 +156,22 @@ const TeacherProfile: React.FC = () => {
       <div className="teacher-profile-content">
         <div className="teacher-list">
           <div className="list-header">
-            <h3>Teachers ({teachers.length})</h3>
+            <h3>Teachers ({filteredTeachers.length})</h3>
+            <input
+              type="text"
+              className="search-input"
+              placeholder="Search by name, email, phone, school, or subjects..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{ width: '300px', padding: '8px 12px', borderRadius: '8px', border: '1px solid #ddd' }}
+            />
             <button onClick={() => { setIsEditing(true); setStatus('Creating new teacher profile...'); }}>
               + Add Teacher
             </button>
           </div>
 
           <div className="teachers-grid">
-            {teachers.map((teacher) => (
+            {filteredTeachers.map((teacher) => (
               <div key={teacher.id} className="teacher-card">
                 <div className="teacher-info">
                   <h4>{teacher.name}</h4>

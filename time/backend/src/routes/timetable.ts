@@ -6,7 +6,8 @@ import {
   createTimetableEntry,
   updateTimetableEntry,
   deleteTimetableEntry,
-  getReferenceData
+  getReferenceData,
+  getWeeklyTimetable
 } from '../controllers/timetableController';
 import { authenticateToken, optionalAuth, requireAdmin } from '../middleware/auth';
 
@@ -15,6 +16,7 @@ const router = Router();
 // Public routes (for display screen)
 router.get('/current-sessions', getCurrentSessions);
 router.get('/today', getTimetable);
+router.get('/week', getWeeklyTimetable);
 
 // Protected routes (admin only)
 router.get('/entries', authenticateToken, requireAdmin, getTimetable);

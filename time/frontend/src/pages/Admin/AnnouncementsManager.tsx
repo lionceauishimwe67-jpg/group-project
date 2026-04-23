@@ -274,7 +274,9 @@ const AnnouncementsManager: React.FC = () => {
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
                     e.currentTarget.style.display = 'none';
-                    e.currentTarget.parentElement!.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#9ca3af;font-size:3rem;">📷</div>';
+                    if (e.currentTarget.parentElement) {
+                      e.currentTarget.parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#9ca3af;font-size:3rem;">📷</div>';
+                    }
                   }}
                 />
               </div>
@@ -367,7 +369,9 @@ const AnnouncementsManager: React.FC = () => {
                         style={{ width: '100%', maxHeight: '200px', objectFit: 'cover' }}
                         onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
                           e.currentTarget.style.display = 'none';
-                          e.currentTarget.parentElement!.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:200px;color:#9ca3af;font-size:2rem;">📷</div>';
+                          if (e.currentTarget.parentElement) {
+                            e.currentTarget.parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:200px;color:#9ca3af;font-size:2rem;">📷</div>';
+                          }
                         }}
                       />
                     </div>
@@ -456,7 +460,9 @@ const AnnouncementsManager: React.FC = () => {
                         style={{ width: '100%', height: '120px', objectFit: 'cover' }}
                         onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
                           e.currentTarget.style.display = 'none';
-                          e.currentTarget.parentElement!.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:120px;color:#9ca3af;font-size:2rem;">📷</div>';
+                          if (e.currentTarget.parentElement) {
+                            e.currentTarget.parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:120px;color:#9ca3af;font-size:2rem;">📷</div>';
+                          }
                         }}
                       />
                       <div style={{ padding: '8px', background: '#fff', fontSize: '0.8rem' }}>
