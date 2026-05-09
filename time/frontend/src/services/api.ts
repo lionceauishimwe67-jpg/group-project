@@ -169,9 +169,18 @@ export const timetableApi = {
     api.get('/api/timetable/entries', { params }),
   getById: (id: number) => api.get(`/api/timetable/entries/${id}`),
   create: (data: any) => api.post('/api/timetable', data),
+  bulkSave: (classId: number, entries: any[]) => api.post('/api/timetable/bulk-save', { classId, entries }),
   update: (id: number, data: any) => api.put(`/api/timetable/${id}`, data),
   delete: (id: number) => api.delete(`/api/timetable/${id}`),
+  deleteAll: () => api.delete('/api/timetable'),
   getReferenceData: () => api.get('/api/timetable/reference-data'),
+  batchImport: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/api/timetable/batch-import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
 };
 
 // Announcements API
@@ -179,8 +188,14 @@ export const announcementApi = {
   getAll: () => api.get('/api/announcements'),
   getAllAdmin: () => api.get('/api/announcements/all'),
   getById: (id: number) => api.get(`/api/announcements/${id}`),
-  create: (data: FormData) => api.post('/api/announcements', data),
-  update: (id: number, data: FormData) => api.put(`/api/announcements/${id}`, data),
+  create: (data: FormData) =>
+    api.post('/api/announcements', data, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  update: (id: number, data: FormData) =>
+    api.put(`/api/announcements/${id}`, data, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
   delete: (id: number) => api.delete(`/api/announcements/${id}`),
   reorder: (orders: { id: number; display_order: number }[]) =>
     api.post('/api/announcements/reorder', { orders }),
@@ -213,6 +228,147 @@ export const notificationApi = {
   getHistory: () => api.get('/api/notifications/history'),
   sendTestNotification: (data: { teacherId: number }) =>
     api.post('/api/notifications/test', data),
+};
+
+// Bell API (Smart Bell integration)
+export const bellApi = {
+  triggerManualBell: () => api.post('/api/bell/ring-now'),
+  getCurrentSession: () => api.get('/api/bell/current-session'),
+  getDevices: () => api.get('/api/bell/devices'),
+  getBellLogs: () => api.get('/api/bell/logs'),
+  sendHeartbeat: (deviceId: string) => api.post('/api/bell/heartbeat', { device_id: deviceId }),
+};
+
+// Break Times API
+export const breakTimesApi = {
+  getAll: () => api.get('/api/break-times'),
+  getById: (id: number) => api.get(`/api/break-times/${id}`),
+  create: (data: any) => api.post('/api/break-times', data),
+  update: (id: number, data: any) => api.put(`/api/break-times/${id}`, data),
+  delete: (id: number) => api.delete(`/api/break-times/${id}`),
+};
+
+// Dynamic Events API
+export const dynamicEventsApi = {
+  getAll: (params?: any) => api.get('/api/dynamic-events', { params }),
+  getById: (id: number) => api.get(`/api/dynamic-events/${id}`),
+  getUpcomingToday: () => api.get('/api/dynamic-events/upcoming/today'),
+  create: (data: any) => api.post('/api/dynamic-events', data),
+  update: (id: number, data: any) => api.put(`/api/dynamic-events/${id}`, data),
+  delete: (id: number) => api.delete(`/api/dynamic-events/${id}`),
+  cancel: (id: number) => api.post(`/api/dynamic-events/${id}/cancel`),
+};
+
+// Phone Numbers API (SMS notifications)
+export const phoneNumbersApi = {
+  getAll: () => api.get('/api/phone-numbers'),
+  add: (data: { phone_number: string; name?: string }) => api.post('/api/phone-numbers', data),
+  delete: (id: number) => api.delete(`/api/phone-numbers/${id}`),
+  toggle: (id: number) => api.post(`/api/phone-numbers/${id}/toggle`),
+};
+
+// Students API
+export const studentApi = {
+  getAll: (params?: { classId?: number; status?: string; search?: string }) =>
+    api.get('/api/students', { params }),
+  getById: (id: number) => api.get(`/api/students/${id}`),
+  create: (data: any) => api.post('/api/students', data),
+  update: (id: number, data: any) => api.put(`/api/students/${id}`, data),
+  delete: (id: number) => api.delete(`/api/students/${id}`),
+  getStats: () => api.get('/api/students/stats'),
+  recordAttendance: (data: any) => api.post('/api/students/attendance', data),
+};
+
+// Grades API
+export const gradeApi = {
+  getAll: (params?: { studentId?: number; subjectId?: number; classId?: number; term?: string; academicYear?: string }) =>
+    api.get('/api/grades', { params }),
+  getByStudent: (studentId: number) => api.get(`/api/grades/student/${studentId}`),
+  create: (data: any) => api.post('/api/grades', data),
+  update: (id: number, data: any) => api.put(`/api/grades/${id}`, data),
+  delete: (id: number) => api.delete(`/api/grades/${id}`),
+  getStats: (params?: any) => api.get('/api/grades/stats', { params }),
+};
+
+// Alumni API
+export const alumniApi = {
+  getAll: (params?: { graduationYear?: number; search?: string; status?: string }) =>
+    api.get('/api/alumni', { params }),
+  getById: (id: number) => api.get(`/api/alumni/${id}`),
+  create: (data: any) => api.post('/api/alumni', data),
+  update: (id: number, data: any) => api.put(`/api/alumni/${id}`, data),
+  delete: (id: number) => api.delete(`/api/alumni/${id}`),
+  getStats: () => api.get('/api/alumni/stats'),
+};
+
+// School Events API
+export const schoolEventApi = {
+  getAll: (params?: { type?: string; from?: string; to?: string; isPublic?: boolean; search?: string }) =>
+    api.get('/api/school-events', { params }),
+  getUpcoming: () => api.get('/api/school-events/upcoming'),
+  getById: (id: number) => api.get(`/api/school-events/${id}`),
+  create: (data: any) => api.post('/api/school-events', data),
+  update: (id: number, data: any) => api.put(`/api/school-events/${id}`, data),
+  delete: (id: number) => api.delete(`/api/school-events/${id}`),
+  getStats: () => api.get('/api/school-events/stats'),
+};
+
+// Uploads API
+export const uploadApi = {
+  getAll: (params?: { category?: string; entityType?: string; entityId?: number }) =>
+    api.get('/api/uploads', { params }),
+  getById: (id: number) => api.get(`/api/uploads/${id}`),
+  upload: (formData: FormData) =>
+    api.post('/api/uploads', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  delete: (id: number) => api.delete(`/api/uploads/${id}`),
+  getStats: () => api.get('/api/uploads/stats'),
+};
+
+// Parents API
+export const parentApi = {
+  getAll: (params?: { search?: string }) => api.get('/api/parents', { params }),
+  getById: (id: number) => api.get(`/api/parents/${id}`),
+  create: (data: any) => api.post('/api/parents', data),
+  update: (id: number, data: any) => api.put(`/api/parents/${id}`, data),
+  delete: (id: number) => api.delete(`/api/parents/${id}`),
+  linkToStudent: (data: { parentId: number; studentId: number; isPrimary?: boolean }) =>
+    api.post('/api/parents/link', data),
+  unlinkFromStudent: (data: { parentId: number; studentId: number }) =>
+    api.post('/api/parents/unlink', data),
+};
+
+// Smart Timetable System API
+export const smartTimetableApi = {
+  uploadChronogram: (file: File, onProgress?: (p: number) => void) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/api/smart-timetable/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: (e: any) => {
+        if (e.total && onProgress) onProgress(Math.round((e.loaded * 100) / e.total));
+      },
+    });
+  },
+  validateChronogram: (uploadId: number) =>
+    api.post('/api/smart-timetable/validate', { uploadId }),
+  generateTimetable: (uploadId: number, classId: number, config?: any) =>
+    api.post('/api/smart-timetable/generate', { uploadId, classId, ...config }),
+  saveTimetable: (generationId: number, replaceExisting = true) =>
+    api.post('/api/smart-timetable/save', { generationId, replaceExisting }),
+  getRealTime: () => api.get('/api/smart-timetable/real-time'),
+  getCurrentActivity: (classId: number) =>
+    api.get('/api/smart-timetable/current-activity', { params: { classId } }),
+  exportTimetable: (params: { generationId?: number; classId?: number; format?: string }) =>
+    api.post('/api/smart-timetable/export', params, { responseType: 'blob' }),
+  getHistory: (params?: { classId?: number }) =>
+    api.get('/api/smart-timetable/history', { params }),
+  deleteHistory: (id: number) => api.delete(`/api/smart-timetable/history/${id}`),
+  deleteAllHistory: (classId?: number) => api.post('/api/smart-timetable/history/delete-all', { classId }),
+  deleteAllTimetable: (classId?: number) => api.post('/api/smart-timetable/timetable/delete-all', { classId }),
+  deleteAllUploads: () => api.post('/api/smart-timetable/uploads/delete-all'),
+  fullReset: (classId?: number) => api.post('/api/smart-timetable/reset', { classId }),
 };
 
 export default api;
