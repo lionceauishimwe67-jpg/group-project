@@ -70,6 +70,7 @@ const STS: React.FC = () => {
   const [history, setHistory] = useState<any[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<'none'|'history'|'timetable'|'full'>('none');
   const [deleting, setDeleting] = useState(false);
+  const [isJsonFile, setIsJsonFile] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -121,16 +122,39 @@ const STS: React.FC = () => {
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
-    if (f) { setFile(f); setErr(''); setUploadResult(null); setValidation(null); setGeneration(null); }
+    if (f) {
+      setFile(f);
+      setErr('');
+      setUploadResult(null);
+      setValidation(null);
+      setGeneration(null);
+      // Auto-detect JSON files for direct generation
+      if (f.name.toLowerCase().endsWith('.json')) {
+        setIsJsonFile(true);
+      } else {
+        setIsJsonFile(false);
+      }
+    }
   };
 
   const doUpload = async () => {
     if (!file) { setErr('Select a file first'); return; }
     setUploading(true); setErr(''); setUploadProgress(0);
     try {
-      const r = await smartTimetableApi.uploadChronogram(file, (p) => setUploadProgress(p));
-      setUploadResult(r.data);
-      setActiveTab('analyze');
+      if (isJsonFile) {
+        // Handle JSON files directly - read content and generate timetable
+        const jsonContent = await file.text();
+        const payload = JSON.parse(jsonContent);
+        setUploadProgress(50);
+        const r = await smartTimetableApi.generateFromChronogram(payload);
+        setGeneration(r.data?.data || null);
+        setActiveTab('preview');
+      } else {
+        // Handle other files through normal upload process
+        const r = await smartTimetableApi.uploadChronogram(file, (p) => setUploadProgress(p));
+        setUploadResult(r.data);
+        setActiveTab('analyze');
+      }
     } catch (e: any) {
       setErr(e.response?.data?.error || 'Upload failed');
     } finally { setUploading(false); }
@@ -269,8 +293,36 @@ const STS: React.FC = () => {
       <div className="sts-main">
         {activeTab==='upload' && (
           <section className="sts-panel">
-            <h2>Upload Chronogram</h2>
-            <p className="sts-hint">Upload any file format: PDF, Word (.docx), Excel (.xlsx), CSV, Image, Text, JSON</p>
+            <h2>Upload Timetable File</h2>
+            {isJsonFile ? (
+              <p className="sts-hint">Upload a JSON file with complete timetable data to generate timetable directly.</p>
+            ) : (
+              <p className="sts-hint">Upload a timetable file containing subject assignments. Supported formats: Excel (.xlsx/.xls), PDF, Word (.docx), CSV, or images.</p>
+            )}
+            {isJsonFile ? (
+              <div className="sts-instructions">
+                <h4>JSON File Format:</h4>
+                <p>Your JSON file should contain:</p>
+                <ul>
+                  <li><strong>days:</strong> Array of day names (e.g., ["Monday", "Tuesday", ...])</li>
+                  <li><strong>classes:</strong> Array of class objects with id, name, level, students</li>
+                  <li><strong>subjects:</strong> Array of subject objects with name, teacher, hours_per_week, availability</li>
+                  <li><strong>time_slots:</strong> Array of time slot strings (e.g., ["08:00-09:00", "09:00-10:00"])</li>
+                  <li><strong>classId:</strong> The ID of the class to generate timetable for</li>
+                </ul>
+                <p><em>Use the timetable-template.json file as a reference.</em></p>
+              </div>
+            ) : (
+              <div className="sts-instructions">
+                <h4>Expected File Format:</h4>
+                <ul>
+                  <li><strong>Excel/CSV:</strong> Timetable grid with time slots in first column, days as headers, subjects with teacher IDs in cells (e.g., "MATH(19)")</li>
+                  <li><strong>PDF/Word:</strong> Structured timetable with clear time slots and subject assignments</li>
+                  <li><strong>Images:</strong> Scanned timetables (OCR will attempt to extract data)</li>
+                </ul>
+                <p><em>Note: Files containing only teacher lists or availability schedules won't work. You need actual timetable grids showing when subjects are taught.</em></p>
+              </div>
+            )}
             <div className="sts-upload-zone" onClick={()=>fileRef.current?.click()} onDrop={(e)=>{e.preventDefault();const f=e.dataTransfer.files[0];if(f){setFile(f);setErr('');}}} onDragOver={(e)=>e.preventDefault()}>
               <input type="file" ref={fileRef} style={{display:'none'}} accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.txt,.json,.png,.jpg,.jpeg,.bmp,.webp,.tiff" onChange={handleFile} />
               <div className="sts-upload-icon">Upload</div>
@@ -280,11 +332,11 @@ const STS: React.FC = () => {
             {uploading && (
               <div className="sts-progress">
                 <div className="sts-progress-bar" style={{width:`${uploadProgress}%`}}></div>
-                <span>Analyzing with AI... {uploadProgress}%</span>
+                <span>{isJsonFile ? 'Generating timetable from JSON...' : 'Analyzing with AI...'} {uploadProgress}%</span>
               </div>
             )}
             <div className="sts-actions">
-              <button className="sts-btn-primary" onClick={doUpload} disabled={!file||uploading}>{uploading?'Analyzing...':'AI Analyze File'}</button>
+              <button className="sts-btn-primary" onClick={doUpload} disabled={!file||uploading}>{uploading?'Processing...':(isJsonFile?'Generate Timetable':'AI Analyze File')}</button>
             </div>
             {uploadResult && (
               <div className="sts-result-box">

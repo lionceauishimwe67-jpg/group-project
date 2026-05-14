@@ -1,8 +1,10 @@
+@import '../../styles/professional.css';
+
 .teacher-profile {
-  padding: 24px;
-  background: linear-gradient(135deg, #e8f4fc 0%, #f0f7ff 50%, #f8fbff 100%);
+  padding: 0;
+  background: transparent;
   min-height: 100vh;
-  color: black;
+  color: #1f2937;
 }
 
 .teacher-profile-header {
@@ -15,13 +17,16 @@
 .teacher-profile-header h2 {
   font-size: 2rem;
   font-weight: 700;
-  color: #00d4ff;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
   margin: 0;
 }
 
 .status {
   font-size: 0.9rem;
-  color: black;
+  color: #6b7280;
   margin: 0;
 }
 
@@ -44,13 +49,17 @@
   padding: 16px;
   background: white;
   border-radius: 12px;
-  border: 2px solid rgba(25, 118, 210, 0.15);
+  border: 2px solid rgba(102, 126, 234, 0.15);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 .list-header h3 {
   font-size: 1.2rem;
   font-weight: 700;
-  color: #00d4ff;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
   margin: 0;
 }
 
@@ -62,13 +71,14 @@
   cursor: pointer;
   transition: all 0.3s ease;
   border: none;
-  background: linear-gradient(135deg, #00d4ff 0%, #00ffcc 100%);
-  color: #0a1628;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
 }
 
 .list-header button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(0, 212, 255, 0.4);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
 }
 
 .teachers-grid {
@@ -80,27 +90,28 @@
 .teacher-card {
   background: white;
   border-radius: 12px;
-  border: 2px solid rgba(25, 118, 210, 0.15);
+  border: 2px solid rgba(102, 126, 234, 0.15);
   padding: 16px;
   transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 .teacher-card:hover {
   transform: translateY(-2px);
-  border-color: rgba(0, 212, 255, 0.3);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+  border-color: rgba(102, 126, 234, 0.3);
+  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.15);
 }
 
 .teacher-info h4 {
   font-size: 1.1rem;
   font-weight: 700;
-  color: #00d4ff;
+  color: #667eea;
   margin: 0 0 8px 0;
 }
 
 .teacher-info p {
   font-size: 0.9rem;
-  color:black;
+  color: #4b5563;
   margin: 4px 0;
 }
 
@@ -119,37 +130,41 @@
   cursor: pointer;
   transition: all 0.3s ease;
   border: none;
-  background: rgba(0, 212, 255, 0.2);
-  color: #00d4ff;
+  background: rgba(102, 126, 234, 0.1);
+  color: #667eea;
 }
 
 .teacher-actions button:hover {
-  background: rgba(0, 212, 255, 0.3);
+  background: rgba(102, 126, 234, 0.2);
   transform: translateY(-1px);
 }
 
 .teacher-actions button.delete {
-  background: rgba(239, 68, 68, 0.2);
-  color: black;
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
 }
 
 .teacher-actions button.delete:hover {
-  background: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.2);
 }
 
 .teacher-form {
   background: white;
   border-radius: 12px;
-  border: 2px solid rgba(25, 118, 210, 0.15);
+  border: 2px solid rgba(102, 126, 234, 0.15);
   padding: 24px;
   position: sticky;
   top: 24px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 .teacher-form h3 {
   font-size: 1.5rem;
   font-weight: 700;
-  color: black;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
   margin: 0 0 24px 0;
 }
 
@@ -161,7 +176,7 @@
   display: block;
   font-size: 0.9rem;
   font-weight: 600;
-  color: black;
+  color: #374151;
   margin-bottom: 8px;
 }
 
@@ -169,10 +184,10 @@
 .form-group textarea {
   width: 100%;
   padding: 12px;
-  border: 2px solid #e0e0e0;
+  border: 2px solid #e5e7eb;
   border-radius: 8px;
   background: white;
-  color: black;
+  color: #1f2937;
   font-size: 0.95rem;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   transition: all 0.3s ease;
@@ -181,8 +196,8 @@
 .form-group input:focus,
 .form-group textarea:focus {
   outline: none;
-  border-color: #00d4ff;
-  box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.1);
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
 .form-group textarea {
@@ -208,13 +223,14 @@
 }
 
 .form-actions button[type="submit"] {
-  background: linear-gradient(135deg, #00d4ff 0%, #00ffcc 100%);
-  color: black;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
 }
 
 .form-actions button[type="submit"]:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(0, 212, 255, 0.4);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
 }
 
 .form-actions button[type="submit"]:disabled {
@@ -223,12 +239,12 @@
 }
 
 .form-actions button.cancel {
-  background: rgba(255, 255, 255, 0.1);
-  color: black;
+  background: #f3f4f6;
+  color: #4b5563;
 }
 
 .form-actions button.cancel:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: #e5e7eb;
 }
 
 .delete-confirm-dialog {
@@ -238,6 +254,7 @@
   right: 0;
   bottom: 0;
   background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -256,12 +273,13 @@
 
 .delete-confirm-content {
   background: white;
-  border: 2px solid rgba(25, 118, 210, 0.15);
+  border: 2px solid rgba(102, 126, 234, 0.15);
   border-radius: 12px;
   padding: 24px;
   max-width: 400px;
   width: 90%;
   animation: slideIn 0.3s ease;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
 }
 
 @keyframes slideIn {
@@ -278,13 +296,13 @@
 .delete-confirm-content h3 {
   font-size: 1.3rem;
   font-weight: 700;
-  color: black;
+  color: #1f2937;
   margin: 0 0 12px 0;
 }
 
 .delete-confirm-content p {
   font-size: 0.95rem;
-  color: black;
+  color: #4b5563;
   margin: 0 0 20px 0;
   line-height: 1.5;
 }
@@ -306,17 +324,17 @@
 }
 
 .delete-confirm-actions button.cancel {
-  background: rgba(255, 255, 255, 0.1);
-  color: black;
+  background: #f3f4f6;
+  color: #4b5563;
 }
 
 .delete-confirm-actions button.cancel:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: #e5e7eb;
 }
 
 .delete-confirm-actions button.delete {
   background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-  color:black;
+  color: white;
 }
 
 .delete-confirm-actions button.delete:hover {
@@ -336,7 +354,7 @@
 
 @media (max-width: 768px) {
   .teacher-profile {
-    padding: 16px;
+    padding: 0;
   }
   
   .teacher-profile-header {

@@ -1,18 +1,18 @@
+@import '../../styles/professional.css';
+
 .timetable-manager {
-  padding: 20px;
-  max-width: 1400px;
-  margin: 0 auto;
-  background: linear-gradient(135deg, #e8f4fc 0%, #f0f7ff 50%, #f8fbff 100%);
+  padding: 0;
+  max-width: 100%;
+  margin: 0;
   min-height: 100vh;
-  border-radius: 20px;
 }
 
 .timetable-manager-header {
   margin-bottom: 30px;
   padding: 25px;
-  background: linear-gradient(135deg, rgba(25, 118, 210, 0.05) 0%, rgba(33, 150, 243, 0.03) 100%);
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.03) 100%);
   border-radius: 16px;
-  border: 2px solid rgba(25, 118, 210, 0.2);
+  border: 2px solid rgba(102, 126, 234, 0.2);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -22,7 +22,7 @@
   margin: 0;
   font-size: 1.8rem;
   font-weight: 700;
-  background: linear-gradient(135deg, #1976d2 0%, #2196f3 50%, #1976d2 100%);
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #667eea 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -30,7 +30,7 @@
 
 .timetable-manager-header .status {
   margin: 0;
-  color: black;
+  color: #6b7280;
   font-size: 0.95rem;
 }
 
@@ -50,34 +50,34 @@
   align-items: center;
   margin-bottom: 20px;
   padding: 20px;
-  background: linear-gradient(135deg, black 0%,black 100%);
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
   backdrop-filter: blur(10px);
   border-radius: 16px;
-  border: 2px solid rgba(25, 118, 210, 0.2);
+  border: 2px solid rgba(102, 126, 234, 0.2);
 }
 
 .list-header h3 {
   margin: 0;
   font-size: 1.3rem;
   font-weight: 700;
-  color: #1976d2;
+  color: #667eea;
 }
 
 .list-header button {
   padding: 10px 20px;
-  background: linear-gradient(135deg, #1976d2 0%, #2196f3 100%);
-  color: black;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
   border: none;
   border-radius: 8px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(25, 118, 210, 0.3);
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
 }
 
 .list-header button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(25, 118, 210, 0.4);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
 }
 
 .timetable-grid {
@@ -90,29 +90,29 @@
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(245, 245, 245, 0.9) 100%);
   backdrop-filter: blur(10px);
   border-radius: 16px;
-  border: 2px solid rgba(25, 118, 210, 0.2);
+  border: 2px solid rgba(102, 126, 234, 0.2);
   padding: 20px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08),
-              0 0 60px rgba(25, 118, 210, 0.1);
+              0 0 60px rgba(102, 126, 234, 0.1);
   transition: all 0.3s ease;
 }
 
 .timetable-card:hover {
   transform: translateY(-4px);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12),
-              0 0 80px rgba(25, 118, 210, 0.15);
+              0 0 80px rgba(102, 126, 234, 0.15);
 }
 
 .timetable-info h4 {
   margin: 0 0 12px 0;
   font-size: 1.1rem;
   font-weight: 700;
-  color: #1976d2;
+  color: #667eea;
 }
 
 .timetable-info p {
   margin: 6px 0;
-  color: black;
+  color: #4b5563;
   font-size: 0.9rem;
 }
 
@@ -126,13 +126,13 @@
 }
 
 .badge-success {
-  background: linear-gradient(135deg, #4caf50 0%, #8bc34a 100%);
-  color: black;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
 }
 
 .badge-warning {
-  background: linear-gradient(135deg, #ff9800 0%, #ffc107 100%);
-  color: black;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: white;
 }
 
 .timetable-actions {
@@ -140,14 +140,14 @@
   gap: 8px;
   margin-top: 16px;
   padding-top: 16px;
-  border-top: 1px solid rgba(25, 118, 210, 0.1);
+  border-top: 1px solid rgba(102, 126, 234, 0.1);
 }
 
 .timetable-actions button {
   flex: 1;
   padding: 8px 16px;
-  background: linear-gradient(135deg, #1976d2 0%, #2196f3 100%);
-  color: black;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
   border: none;
   border-radius: 8px;
   font-weight: 600;
@@ -158,26 +158,26 @@
 
 .timetable-actions button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(25, 118, 210, 0.3);
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
 }
 
 .timetable-actions button.delete {
-  background: linear-gradient(135deg, #f44336 0%, #e53935 100%);
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
 }
 
 .timetable-actions button.delete:hover {
-  box-shadow: 0 4px 15px rgba(244, 67, 54, 0.3);
+  box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
 }
 
 .timetable-form {
   width: 400px;
-  background: linear-gradient(145deg, #e8f4fc 0%, #f0f7ff 50%, #f8fbff 100%);
+  background: linear-gradient(145deg, #f8fafc 0%, #f1f5f9 50%, #e2e8f0 100%);
   backdrop-filter: blur(20px);
   border-radius: 20px;
-  border: 2px solid rgba(25, 118, 210, 0.15);
+  border: 2px solid rgba(102, 126, 234, 0.15);
   padding: 30px;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1),
-              0 0 80px rgba(25, 118, 210, 0.08),
+              0 0 80px rgba(102, 126, 234, 0.08),
               inset 0 1px 0 rgba(255, 255, 255, 0.8);
   position: sticky;
   top: 20px;
@@ -187,13 +187,13 @@
   margin: 0 0 25px 0;
   font-size: 1.5rem;
   font-weight: 700;
-  background: linear-gradient(135deg, #1976d2 0%, #2196f3 50%, #42a5f5 100%);
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #667eea 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
   text-align: center;
   padding-bottom: 15px;
-  border-bottom: 2px solid rgba(25, 118, 210, 0.1);
+  border-bottom: 2px solid rgba(102, 126, 234, 0.1);
 }
 
 .form-group {
@@ -204,7 +204,7 @@
   display: block;
   margin-bottom: 8px;
   font-weight: 600;
-  color: #2c3e50;
+  color: #374151;
   font-size: 0.95rem;
   letter-spacing: 0.3px;
   text-transform: uppercase;
@@ -216,7 +216,7 @@
 .form-group input[type="date"] {
   width: 100%;
   padding: 14px 16px;
-  border: 2px solid #1976d2;
+  border: 2px solid #e5e7eb;
   border-radius: 12px;
   font-size: 0.95rem;
   transition: all 0.3s ease;
@@ -228,9 +228,9 @@
 .form-group input[type="time"]:focus,
 .form-group input[type="date"]:focus {
   outline: none;
-  border-color: #1976d2;
+  border-color: #667eea;
   background: white;
-  box-shadow: 0 4px 12px rgba(25, 118, 210, 0.15),
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15),
               inset 0 2px 4px rgba(0, 0, 0, 0.02);
   transform: translateY(-1px);
 }
@@ -238,7 +238,7 @@
 .form-group input[type="text"]:hover,
 .form-group input[type="time"]:hover,
 .form-group input[type="date"]:hover {
-  border-color: #1976d2;
+  border-color: #667eea;
   background: white;
 }
 
@@ -257,7 +257,7 @@
   gap: 12px;
   margin-top: 28px;
   padding-top: 24px;
-  border-top: 2px solid rgba(25, 118, 210, 0.1);
+  border-top: 2px solid rgba(102, 126, 234, 0.1);
 }
 
 .form-actions button {
@@ -274,18 +274,18 @@
 }
 
 .form-actions button[type="submit"] {
-  background: linear-gradient(135deg, #1976d2 0%, #2196f3 50%, #42a5f5 100%);
-  color: black;
-  box-shadow: 0 4px 15px rgba(25, 118, 210, 0.3),
-              0 2px 8px rgba(25, 118, 210, 0.2);
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #667eea 100%);
+  color: white;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3),
+              0 2px 8px rgba(102, 126, 234, 0.2);
   position: relative;
   overflow: hidden;
 }
 
 .form-actions button[type="submit"]:hover {
   transform: translateY(-3px) scale(1.02);
-  box-shadow: 0 8px 25px rgba(25, 118, 210, 0.4),
-              0 4px 12px rgba(25, 118, 210, 0.3);
+  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4),
+              0 4px 12px rgba(102, 126, 234, 0.3);
 }
 
 .form-actions button[type="submit"]:active {
@@ -301,7 +301,7 @@
 
 .form-actions button.cancel {
   background: linear-gradient(135deg, #757575 0%, #616161 100%);
-  color: black;
+  color: white;
   box-shadow: 0 4px 15px rgba(117, 117, 117, 0.3);
 }
 

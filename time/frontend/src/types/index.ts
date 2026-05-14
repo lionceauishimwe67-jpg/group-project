@@ -70,10 +70,15 @@ export interface CurrentSession {
 export interface Announcement {
   id: number;
   title: string;
-  image_path: string;
+  text_content: string | null;
+  image_path: string | null;
+  image_data: any | null;
+  has_image_data?: boolean;
+  image_mime_type: string | null;
   image_url: string;
   display_order: number;
   is_active: boolean;
+  is_approved_for_display: boolean;
   expires_at: string | null;
   created_at: string;
   is_expired?: boolean;

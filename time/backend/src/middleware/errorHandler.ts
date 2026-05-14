@@ -1,3 +1,4 @@
+import multer from 'multer';
 import { Request, Response, NextFunction } from 'express';
 
 export interface AppError extends Error {
@@ -12,6 +13,33 @@ export const errorHandler = (
   next: NextFunction
 ): void => {
   console.error('Error:', err);
+
+  // Multer file upload errors
+  if (err.name === 'MulterError') {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      res.status(400).json({
+        success: false,
+        error: 'File size too large'
+      });
+      return;
+    }
+    if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+      res.status(400).json({
+        success: false,
+        error: 'Unexpected file field'
+      });
+      return;
+    }
+  }
+
+  // File type validation errors from multer fileFilter
+  if (err instanceof multer.MulterError || err.message?.includes('Only spreadsheet files are allowed')) {
+    res.status(400).json({
+      success: false,
+      error: err.message || 'Invalid file upload'
+    });
+    return;
+  }
 
   // MySQL duplicate entry error
   if (err.code === 'ER_DUP_ENTRY') {

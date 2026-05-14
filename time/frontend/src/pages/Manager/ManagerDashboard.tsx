@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { timetableApi } from '../../services/api';
 import { io, Socket } from 'socket.io-client';
+import { API_ORIGIN } from '../../services/network';
 import './ManagerDashboard.css';
 
 interface TimetableEntry {
@@ -36,7 +37,7 @@ const ManagerDashboard: React.FC = () => {
     }, 60000);
 
     // Connect to Socket.IO
-    const socketInstance = io('http://localhost:5000');
+    const socketInstance = io(API_ORIGIN);
     setSocket(socketInstance);
 
     socketInstance.emit('join-manager-room');

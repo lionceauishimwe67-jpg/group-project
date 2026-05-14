@@ -10,6 +10,7 @@ const Announcements: React.FC = () => {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [formData, setFormData] = useState({
     title: '',
+    text_content: '',
     image_url: '',
     local_path: '',
     display_order: 0
@@ -40,6 +41,7 @@ const Announcements: React.FC = () => {
 
     const data = new FormData();
     data.append('title', formData.title);
+    data.append('text_content', formData.text_content);
     data.append('display_order', formData.display_order.toString());
     
     if (imageFile) {
@@ -59,7 +61,7 @@ const Announcements: React.FC = () => {
       
       setShowForm(false);
       setEditingId(null);
-      setFormData({ title: '', image_url: '', local_path: '', display_order: 0 });
+      setFormData({ title: '', text_content: '', image_url: '', local_path: '', display_order: 0 });
       setImageFile(null);
       fetchAnnouncements();
     } catch (err: any) {
@@ -71,6 +73,7 @@ const Announcements: React.FC = () => {
     setEditingId(announcement.id);
     setFormData({
       title: announcement.title,
+      text_content: announcement.text_content || '',
       image_url: announcement.image_url,
       local_path: '',
       display_order: announcement.display_order
@@ -157,6 +160,17 @@ const Announcements: React.FC = () => {
               </div>
 
               <div className="form-group">
+                <label>Announcement Text (optional)</label>
+                <textarea
+                  value={formData.text_content}
+                  onChange={(e) => setFormData({...formData, text_content: e.target.value})}
+                  placeholder="Enter announcement text content..."
+                  rows={4}
+                  style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '1rem', resize: 'vertical' }}
+                />
+              </div>
+
+              <div className="form-group">
                 <label>Image URL (optional)</label>
                 <input
                   type="url"
@@ -223,15 +237,27 @@ const Announcements: React.FC = () => {
           announcements.map((announcement, index) => (
             <div key={announcement.id} className="announcement-item">
               <div className="announcement-preview">
-                {announcement.image_url && (
+                {announcement.image_url ? (
                   <img 
                     src={announcement.image_url} 
                     alt={announcement.title}
                     className="announcement-thumbnail"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                      e.currentTarget.parentElement?.classList.add('image-error');
+                    }}
                   />
+                ) : (
+                  <div className="announcement-no-image">📄</div>
+                )}
+                {announcement.image_url && (
+                  <span className="image-badge" title="Has image">🖼️</span>
                 )}
                 <div className="announcement-info">
                   <h3>{announcement.title}</h3>
+                  {announcement.text_content && (
+                    <p className="announcement-text-preview">{announcement.text_content}</p>
+                  )}
                   <p>Order: {announcement.display_order}</p>
                 </div>
               </div>

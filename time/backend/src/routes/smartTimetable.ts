@@ -17,6 +17,7 @@ import {
   deleteAllUploads,
   fullTimetableReset,
 } from '../controllers/smartTimetableController';
+import { generateTimetableFromChronogramHandler } from '../controllers/aiTimetableGenerator';
 
 // Configure multer for any file type
 const uploadDir = path.join(process.cwd(), 'uploads', 'chronograms');
@@ -48,6 +49,9 @@ router.post('/validate', validateChronogramData);
 
 // Generate smart timetable from chronogram
 router.post('/generate', generateSmartTimetable);
+
+// Generate timetable from chronogram data
+router.post('/generate-from-chronogram', generateTimetableFromChronogramHandler);
 
 // Save generated timetable to active timetable
 router.post('/save', saveGeneratedTimetable);

@@ -10,6 +10,11 @@ interface Teacher {
   school: string;
   teaching_schedule: string;
   subjects: string;
+  level: string;
+  specific_competences: string;
+  general_competences: string;
+  complementary_competences: string;
+  sms_notification_enabled: number;
   created_at: string;
 }
 
@@ -21,7 +26,12 @@ const TeacherProfile: React.FC = () => {
     phone: '',
     school: '',
     teaching_schedule: '',
-    subjects: ''
+    subjects: '',
+    level: '',
+    specific_competences: '',
+    general_competences: '',
+    complementary_competences: '',
+    sms_notification_enabled: 1
   });
   const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -45,19 +55,22 @@ const TeacherProfile: React.FC = () => {
     }
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('Form submitted with data:', formData);
     
     try {
       setStatus('Saving teacher profile...');
       const response = selectedTeacher 
         ? await teachersApi.update(selectedTeacher.id, formData)
         : await teachersApi.create(formData);
+
+      console.log('API response:', response);
 
       if (response.status === 200 || response.status === 201) {
         setStatus('Teacher profile saved successfully!');
@@ -67,7 +80,12 @@ const TeacherProfile: React.FC = () => {
           phone: '',
           school: '',
           teaching_schedule: '',
-          subjects: ''
+          subjects: '',
+          level: '',
+          specific_competences: '',
+          general_competences: '',
+          complementary_competences: '',
+          sms_notification_enabled: 1
         });
         setSelectedTeacher(null);
         setIsEditing(false);
@@ -119,6 +137,22 @@ const TeacherProfile: React.FC = () => {
     setDeleteConfirm({ show: false, teacherId: null });
   };
 
+  const toggleSMS = async (teacher: Teacher) => {
+    try {
+      const updatedTeacher = {
+        ...teacher,
+        sms_notification_enabled: teacher.sms_notification_enabled ? 0 : 1
+      };
+      await teachersApi.update(teacher.id, updatedTeacher);
+      fetchTeachers();
+      setStatus(`SMS notifications ${updatedTeacher.sms_notification_enabled ? 'enabled' : 'disabled'} for ${teacher.name}`);
+      setTimeout(() => setStatus('Teachers loaded successfully.'), 2000);
+    } catch (error) {
+      console.error('Error toggling SMS:', error);
+      setStatus('Error toggling SMS notifications.');
+    }
+  };
+
   const handleCancel = () => {
     setFormData({
       name: '',
@@ -126,7 +160,12 @@ const TeacherProfile: React.FC = () => {
       phone: '',
       school: '',
       teaching_schedule: '',
-      subjects: ''
+      subjects: '',
+      level: '',
+      specific_competences: '',
+      general_competences: '',
+      complementary_competences: '',
+      sms_notification_enabled: 1
     });
     setSelectedTeacher(null);
     setIsEditing(false);
@@ -165,7 +204,11 @@ const TeacherProfile: React.FC = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{ width: '300px', padding: '8px 12px', borderRadius: '8px', border: '1px solid #ddd' }}
             />
-            <button onClick={() => { setIsEditing(true); setStatus('Creating new teacher profile...'); }}>
+            <button onClick={() => { 
+              console.log('Add Teacher button clicked');
+              setIsEditing(true); 
+              setStatus('Creating new teacher profile...'); 
+            }}>
               + Add Teacher
             </button>
           </div>
@@ -176,11 +219,28 @@ const TeacherProfile: React.FC = () => {
                 <div className="teacher-info">
                   <h4>{teacher.name}</h4>
                   {teacher.email && <p>{teacher.email}</p>}
+                  {teacher.phone && <p>{teacher.phone}</p>}
                   {teacher.school && <p>{teacher.school}</p>}
                   {teacher.subjects && <p>Subjects: {teacher.subjects}</p>}
+                  {teacher.level && <p><strong>Level:</strong> {teacher.level}</p>}
+                  {teacher.specific_competences && <p><strong>Specific Competences:</strong> {teacher.specific_competences}</p>}
+                  {teacher.general_competences && <p><strong>General Competences:</strong> {teacher.general_competences}</p>}
+                  {teacher.complementary_competences && <p><strong>Complementary Competences:</strong> {teacher.complementary_competences}</p>}
+                  <p style={{ fontSize: '0.85rem', color: teacher.sms_notification_enabled ? '#4caf50' : '#999' }}>
+                    SMS: {teacher.sms_notification_enabled ? '✓ Enabled' : '✗ Disabled'}
+                  </p>
                 </div>
                 <div className="teacher-actions">
                   <button onClick={() => handleEdit(teacher)}>Edit</button>
+                  <button 
+                    onClick={() => toggleSMS(teacher)}
+                    style={{ 
+                      backgroundColor: teacher.sms_notification_enabled ? '#4caf50' : '#ff9800',
+                      color: 'white'
+                    }}
+                  >
+                    {teacher.sms_notification_enabled ? 'SMS On' : 'SMS Off'}
+                  </button>
                   <button onClick={() => teacher.id && handleDelete(teacher.id)} className="delete">
                     Delete
                   </button>
@@ -253,6 +313,78 @@ const TeacherProfile: React.FC = () => {
                   value={formData.subjects || ''}
                   onChange={handleInputChange}
                 />
+              </div>
+
+              <div className="form-group">
+                <label>Level (Class Level Taught)</label>
+                <select
+                  name="level"
+                  value={formData.level || ''}
+                  onChange={handleInputChange}
+                >
+                  <option value="">Select Level</option>
+                  <option value="S1">S1</option>
+                  <option value="S2">S2</option>
+                  <option value="S3">S3</option>
+                  <option value="S4">S4</option>
+                  <option value="S5">S5</option>
+                  <option value="S6">S6</option>
+                  <option value="L1">L1</option>
+                  <option value="L2">L2</option>
+                  <option value="L3">L3</option>
+                  <option value="L4">L4</option>
+                  <option value="L5">L5</option>
+                  <option value="L6">L6</option>
+                  <option value="All">All Levels</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>Specific Competences</label>
+                <textarea
+                  name="specific_competences"
+                  value={formData.specific_competences || ''}
+                  onChange={handleInputChange}
+                  rows={3}
+                  placeholder="List specific competences separated by commas"
+                />
+              </div>
+
+              <div className="form-group">
+                <label>General Competences</label>
+                <textarea
+                  name="general_competences"
+                  value={formData.general_competences || ''}
+                  onChange={handleInputChange}
+                  rows={3}
+                  placeholder="List general competences separated by commas"
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Complementary Competences</label>
+                <textarea
+                  name="complementary_competences"
+                  value={formData.complementary_competences || ''}
+                  onChange={handleInputChange}
+                  rows={3}
+                  placeholder="List complementary competences separated by commas"
+                />
+              </div>
+
+              <div className="form-group">
+                <label>
+                  <input
+                    type="checkbox"
+                    name="sms_notification_enabled"
+                    checked={formData.sms_notification_enabled === 1}
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      sms_notification_enabled: e.target.checked ? 1 : 0
+                    })}
+                  />
+                  Enable SMS Notifications
+                </label>
               </div>
 
               <div className="form-actions">

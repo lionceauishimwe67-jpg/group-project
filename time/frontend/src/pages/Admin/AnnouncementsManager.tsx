@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { announcementApi } from '../../services/api';
 import { Announcement } from '../../types';
+import axios from 'axios';
 
 interface AvailableImage {
   filename: string;
@@ -9,20 +10,46 @@ interface AvailableImage {
   size: number;
 }
 
+interface DeliveryStatus {
+  id: number;
+  announcement_id: number;
+  teacher_id: number;
+  status: 'sent' | 'delivered' | 'read';
+  sent_at: string;
+  delivered_at: string | null;
+  read_at: string | null;
+  teacher_name: string;
+  teacher_email: string;
+}
+
+interface DeliveryMeta {
+  total_teachers: number;
+  sent: number;
+  delivered: number;
+  read: number;
+  pending: number;
+}
+
 const AnnouncementsManager: React.FC = () => {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImageBrowserOpen, setIsImageBrowserOpen] = useState(false);
+  const [isDeliveryModalOpen, setIsDeliveryModalOpen] = useState(false);
   const [editingAnnouncement, setEditingAnnouncement] = useState<Announcement | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [availableImages, setAvailableImages] = useState<AvailableImage[]>([]);
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
+  const [deliveryStatus, setDeliveryStatus] = useState<DeliveryStatus[]>([]);
+  const [deliveryMeta, setDeliveryMeta] = useState<DeliveryMeta | null>(null);
+  const [selectedAnnouncementForStatus, setSelectedAnnouncementForStatus] = useState<Announcement | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
     title: '',
+    text_content: '',
     image: null as File | null,
     display_order: 0,
     expires_at: '',
@@ -102,6 +129,7 @@ const AnnouncementsManager: React.FC = () => {
     setEditingAnnouncement(null);
     setFormData({
       title: '',
+      text_content: '',
       image: null,
       display_order: 0,
       expires_at: '',
@@ -154,6 +182,7 @@ const AnnouncementsManager: React.FC = () => {
     
     setFormData({
       title: announcement.title,
+      text_content: (announcement as any).text_content || '',
       image: null,
       display_order: announcement.display_order,
       expires_at: formattedExpiresAt,
@@ -169,14 +198,40 @@ const AnnouncementsManager: React.FC = () => {
         // Compress image
         const compressedFile = await compressImage(file);
         setFormData({ ...formData, image: compressedFile });
-        
-        // Show preview
-        const reader = new FileReader();
-        reader.onloadend = () => setPreviewImage(reader.result as string);
-        reader.readAsDataURL(compressedFile);
+        setPreviewImage(URL.createObjectURL(compressedFile));
       } catch (err) {
         console.error('Compression failed:', err);
         // Fallback to original file
+        setFormData({ ...formData, image: file });
+        const reader = new FileReader();
+        reader.onloadend = () => setPreviewImage(reader.result as string);
+        reader.readAsDataURL(file);
+      }
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    
+    const file = e.dataTransfer.files?.[0];
+    if (file && file.type.startsWith('image/')) {
+      try {
+        const compressedFile = await compressImage(file);
+        setFormData({ ...formData, image: compressedFile });
+        setPreviewImage(URL.createObjectURL(compressedFile));
+      } catch (err) {
+        console.error('Compression failed:', err);
         setFormData({ ...formData, image: file });
         const reader = new FileReader();
         reader.onloadend = () => setPreviewImage(reader.result as string);
@@ -190,6 +245,7 @@ const AnnouncementsManager: React.FC = () => {
 
     const data = new FormData();
     data.append('title', formData.title);
+    if (formData.text_content) data.append('text_content', formData.text_content);
     data.append('display_order', String(formData.display_order));
     if (formData.expires_at) data.append('expires_at', formData.expires_at);
     if (formData.image) data.append('image', formData.image);
@@ -199,8 +255,9 @@ const AnnouncementsManager: React.FC = () => {
       if (editingAnnouncement) {
         await announcementApi.update(editingAnnouncement.id, data);
       } else {
-        if (!formData.image && !selectedImageUrl) {
-          alert('Please select an image');
+        // Allow announcements with just text, just image, or both
+        if (!formData.image && !selectedImageUrl && !formData.text_content) {
+          alert('Please add either text content or an image');
           return;
         }
         await announcementApi.create(data);
@@ -232,6 +289,51 @@ const AnnouncementsManager: React.FC = () => {
       loadAnnouncements();
     } catch (err: any) {
       alert(err.response?.data?.error || 'Failed to update');
+    }
+  };
+
+  const handleToggleApproval = async (announcement: Announcement) => {
+    const data = new FormData();
+    data.append('is_approved_for_display', String(!announcement.is_approved_for_display));
+    
+    try {
+      await announcementApi.update(announcement.id, data);
+      loadAnnouncements();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to update');
+    }
+  };
+
+  const openDeliveryStatusModal = async (announcement: Announcement) => {
+    setSelectedAnnouncementForStatus(announcement);
+    setIsDeliveryModalOpen(true);
+    
+    try {
+      const response = await axios.get(`/api/announcements/${announcement.id}/delivery-status`);
+      setDeliveryStatus(response.data.data || []);
+      setDeliveryMeta(response.data.meta || null);
+    } catch (err) {
+      console.error('Error fetching delivery status:', err);
+      setDeliveryStatus([]);
+      setDeliveryMeta(null);
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'read': return '#10b981';
+      case 'delivered': return '#3b82f6';
+      case 'sent': return '#f59e0b';
+      default: return '#6b7280';
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'read': return '✓ Read';
+      case 'delivered': return '📬 Delivered';
+      case 'sent': return '📤 Sent';
+      default: return status;
     }
   };
 
@@ -289,21 +391,46 @@ const AnnouncementsManager: React.FC = () => {
                     {announcement.is_expired ? 'Expired' : announcement.is_active ? 'Active' : 'Inactive'}
                   </span>
                   <span className="badge badge-info">Order: {announcement.display_order}</span>
+                  {((announcement as any).has_image_data || announcement.image_data || announcement.image_path) && (
+                    <span className={`badge ${announcement.is_approved_for_display ? 'badge-success' : 'badge-warning'}`}>
+                      {announcement.is_approved_for_display ? '✓ Approved' : '⏳ Pending'}
+                    </span>
+                  )}
+                  {(announcement as any).has_image_data && (
+                    <span className="badge badge-info">DB ✓</span>
+                  )}
                 </div>
                 {announcement.expires_at && (
                   <p style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '12px' }}>
                     Expires: {new Date(announcement.expires_at).toLocaleString()}
                   </p>
                 )}
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button onClick={() => handleToggleActive(announcement)} className="btn btn-secondary btn-sm">
-                    {announcement.is_active ? 'Deactivate' : 'Activate'}
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button onClick={() => openDeliveryStatusModal(announcement)} className="btn btn-secondary btn-sm" title="View Delivery Status">
+                    📊
                   </button>
-                  <button onClick={() => openEditModal(announcement)} className="btn btn-secondary btn-sm">
-                    Edit
+                  <button onClick={() => handleToggleActive(announcement)} className="btn btn-secondary btn-sm" title={announcement.is_active ? 'Deactivate' : 'Activate'}>
+                    {announcement.is_active ? '⏸' : '▶'}
                   </button>
-                  <button onClick={() => handleDelete(announcement.id)} className="btn btn-danger btn-sm">
-                    Delete
+                  {((announcement as any).has_image_data || announcement.image_data || announcement.image_path) && (
+                    <button 
+                      onClick={() => handleToggleApproval(announcement)} 
+                      className="btn btn-secondary btn-sm" 
+                      title={announcement.is_approved_for_display ? 'Disapprove for Display' : 'Approve for Display'}
+                    >
+                      {announcement.is_approved_for_display ? '🚫' : '✓'}
+                    </button>
+                  )}
+                  <button onClick={() => openEditModal(announcement)} className="btn btn-secondary btn-sm" title="Edit">
+                    ✏
+                  </button>
+                  <button 
+                    onClick={() => handleDelete(announcement.id)} 
+                    className="btn btn-danger btn-sm" 
+                    title="Delete"
+                    style={{ minWidth: '40px' }}
+                  >
+                    🗑
                   </button>
                 </div>
               </div>
@@ -332,7 +459,7 @@ const AnnouncementsManager: React.FC = () => {
             <form onSubmit={handleSubmit}>
               <div className="modal-body">
                 <div className="form-group">
-                  <label className="form-label">Title</label>
+                  <label className="form-label">Title *</label>
                   <input
                     type="text"
                     className="form-control"
@@ -340,46 +467,102 @@ const AnnouncementsManager: React.FC = () => {
                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                     placeholder="Enter announcement title"
                     required
+                    autoFocus
                   />
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Image</label>
-                  <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+                  <label className="form-label">Text Content (Optional)</label>
+                  <textarea
+                    className="form-control"
+                    value={formData.text_content}
+                    onChange={(e) => setFormData({ ...formData, text_content: e.target.value })}
+                    placeholder="Enter announcement text content (leave empty for image-only announcements)"
+                    rows={4}
+                    style={{ resize: 'vertical' }}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Image (Optional)</label>
+                  <div
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    style={{
+                      border: `2px dashed ${isDragging ? '#3b82f6' : '#e5e7eb'}`,
+                      borderRadius: '8px',
+                      padding: '20px',
+                      textAlign: 'center',
+                      backgroundColor: isDragging ? '#eff6ff' : '#f9fafb',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                    }}
+                  >
                     <input
                       type="file"
                       className="form-control"
                       accept="image/*"
                       onChange={handleImageChange}
-                      style={{ flex: 1 }}
+                      style={{ display: 'none' }}
+                      id="image-upload"
                     />
-                    <button
-                      type="button"
-                      onClick={openImageBrowser}
-                      className="btn btn-secondary"
-                    >
-                      📁 Browse
-                    </button>
+                    {!previewImage ? (
+                      <label htmlFor="image-upload" style={{ cursor: 'pointer', display: 'block' }}>
+                        <div style={{ fontSize: '3rem', marginBottom: '8px' }}>📷</div>
+                        <div style={{ color: '#6b7280', fontSize: '0.9rem' }}>
+                          Click to upload or drag and drop
+                        </div>
+                        <div style={{ color: '#9ca3af', fontSize: '0.8rem', marginTop: '4px' }}>
+                          PNG, JPG, GIF, WEBP up to 1GB
+                        </div>
+                      </label>
+                    ) : (
+                      <div style={{ position: 'relative' }}>
+                        <img 
+                          src={previewImage} 
+                          alt="Preview" 
+                          style={{ width: '100%', maxHeight: '200px', objectFit: 'cover', borderRadius: '6px' }}
+                          onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
+                            e.currentTarget.style.display = 'none';
+                            if (e.currentTarget.parentElement) {
+                              e.currentTarget.parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:200px;color:#9ca3af;font-size:2rem;">📷</div>';
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormData({ ...formData, image: null });
+                            setPreviewImage(null);
+                          }}
+                          style={{
+                            position: 'absolute',
+                            top: '8px',
+                            right: '8px',
+                            background: 'rgba(239, 68, 68, 0.9)',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '50%',
+                            width: '32px',
+                            height: '32px',
+                            cursor: 'pointer',
+                            fontSize: '16px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                          title="Remove image"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  {previewImage && (
-                    <div style={{ marginTop: '12px', borderRadius: '8px', overflow: 'hidden' }}>
-                      <img 
-                        src={previewImage} 
-                        alt="Preview" 
-                        style={{ width: '100%', maxHeight: '200px', objectFit: 'cover' }}
-                        onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
-                          e.currentTarget.style.display = 'none';
-                          if (e.currentTarget.parentElement) {
-                            e.currentTarget.parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:200px;color:#9ca3af;font-size:2rem;">📷</div>';
-                          }
-                        }}
-                      />
-                    </div>
-                  )}
                 </div>
 
-                <div className="form-row">
-                  <div className="form-group">
+                <div className="form-row" style={{ marginTop: '16px' }}>
+                  <div className="form-group" style={{ flex: 1 }}>
                     <label className="form-label">Display Order</label>
                     <input
                       type="number"
@@ -387,11 +570,12 @@ const AnnouncementsManager: React.FC = () => {
                       value={formData.display_order}
                       onChange={(e) => setFormData({ ...formData, display_order: parseInt(e.target.value) || 0 })}
                       min="0"
+                      placeholder="0"
                     />
                   </div>
 
-                  <div className="form-group">
-                    <label className="form-label">Expires At (optional)</label>
+                  <div className="form-group" style={{ flex: 1 }}>
+                    <label className="form-label">Expires At (Optional)</label>
                     <input
                       type="datetime-local"
                       className="form-control"
@@ -407,7 +591,7 @@ const AnnouncementsManager: React.FC = () => {
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary">
-                  {editingAnnouncement ? 'Update' : 'Upload'}
+                  {editingAnnouncement ? '💾 Save Changes' : '📤 Upload Announcement'}
                 </button>
               </div>
             </form>
@@ -490,6 +674,146 @@ const AnnouncementsManager: React.FC = () => {
                 disabled={!selectedImageUrl}
               >
                 Select Image
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delivery Status Modal */}
+      {isDeliveryModalOpen && selectedAnnouncementForStatus && (
+        <div className="modal-overlay" onClick={() => setIsDeliveryModalOpen(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '700px', maxHeight: '80vh' }}>
+            <div className="modal-header">
+              <h3 className="modal-title">📊 Delivery Status - {selectedAnnouncementForStatus.title}</h3>
+              <button onClick={() => setIsDeliveryModalOpen(false)} className="modal-close">×</button>
+            </div>
+            
+            <div className="modal-body" style={{ overflowY: 'auto', maxHeight: '60vh' }}>
+              {deliveryMeta && (
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', 
+                  gap: '16px', 
+                  marginBottom: '24px',
+                  padding: '16px',
+                  background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+                  borderRadius: '12px',
+                  border: '1px solid #e5e7eb'
+                }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '2rem', fontWeight: 700, color: '#667eea' }}>
+                      {deliveryMeta.total_teachers}
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: '#6b7280', marginTop: '4px' }}>
+                      Total Teachers
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '2rem', fontWeight: 700, color: '#10b981' }}>
+                      {deliveryMeta.read}
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: '#6b7280', marginTop: '4px' }}>
+                      ✓ Read
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '2rem', fontWeight: 700, color: '#3b82f6' }}>
+                      {deliveryMeta.delivered}
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: '#6b7280', marginTop: '4px' }}>
+                      📬 Delivered
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '2rem', fontWeight: 700, color: '#f59e0b' }}>
+                      {deliveryMeta.sent}
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: '#6b7280', marginTop: '4px' }}>
+                      📤 Sent
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '2rem', fontWeight: 700, color: '#6b7280' }}>
+                      {deliveryMeta.pending}
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: '#6b7280', marginTop: '4px' }}>
+                      ⏳ Pending
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {deliveryStatus.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
+                  <div style={{ fontSize: '3rem', marginBottom: '16px' }}>📭</div>
+                  <p>No delivery status records found.</p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {deliveryStatus.map((status) => (
+                    <div
+                      key={status.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '16px',
+                        padding: '16px',
+                        background: '#fff',
+                        borderRadius: '12px',
+                        border: '1px solid #e5e7eb',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.boxShadow = 'none';
+                        e.currentTarget.style.transform = 'translateY(0)';
+                      }}
+                    >
+                      <div style={{
+                        width: '48px',
+                        height: '48px',
+                        borderRadius: '50%',
+                        background: getStatusColor(status.status) + '20',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '1.5rem'
+                      }}>
+                        {status.status === 'read' ? '✓' : status.status === 'delivered' ? '📬' : '📤'}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600, color: '#1f2937', marginBottom: '4px' }}>
+                          {status.teacher_name || `Teacher #${status.teacher_id}`}
+                        </div>
+                        {status.teacher_email && (
+                          <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>
+                            {status.teacher_email}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{
+                        padding: '6px 12px',
+                        borderRadius: '20px',
+                        fontSize: '0.85rem',
+                        fontWeight: 600,
+                        color: 'white',
+                        background: getStatusColor(status.status)
+                      }}>
+                        {getStatusLabel(status.status)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer">
+              <button type="button" onClick={() => setIsDeliveryModalOpen(false)} className="btn btn-primary">
+                Close
               </button>
             </div>
           </div>

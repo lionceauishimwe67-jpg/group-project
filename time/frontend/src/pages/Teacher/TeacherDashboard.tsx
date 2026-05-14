@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { timetableApi } from '../../services/api';
 import './TeacherDashboard.css';
 
@@ -16,6 +17,7 @@ interface TimetableEntry {
 }
 
 const TeacherDashboard: React.FC = () => {
+  const navigate = useNavigate();
   const [lessons, setLessons] = useState<TimetableEntry[]>([]);
   const [todayLessons, setTodayLessons] = useState<TimetableEntry[]>([]);
   const [checkedInLessons, setCheckedInLessons] = useState<Set<number>>(new Set());
@@ -108,8 +110,16 @@ const TeacherDashboard: React.FC = () => {
   return (
     <div className="teacher-dashboard">
       <div className="dashboard-header">
-        <h1>Teacher Dashboard</h1>
-        <p className="teacher-name">{teacherName}</p>
+        <div>
+          <h1>Teacher Dashboard</h1>
+          <p className="teacher-name">{teacherName}</p>
+        </div>
+        <button 
+          onClick={() => navigate('/teacher/announcements')} 
+          className="announcements-btn"
+        >
+          📢 View Announcements
+        </button>
       </div>
 
       {loading ? (

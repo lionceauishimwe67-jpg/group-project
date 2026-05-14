@@ -1,35 +1,27 @@
 import multer from 'multer';
 import path from 'path';
-import fs from 'fs';
 
-// Ensure upload directory exists at the correct location
-const uploadDir = path.join(process.cwd(), 'uploads', 'announcements');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
+// Use memory storage since images are stored in database
+const storage = multer.memoryStorage();
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    // Create unique filename with timestamp
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
-    cb(null, `announcement-${uniqueSuffix}${ext}`);
-  }
-});
-
-// File filter - accept any file type
+// File filter - accept all common image formats
 const fileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-  // Accept any file type
-  cb(null, true);
+  const allowedExtensions = [
+    '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.svg', '.ico', '.tiff', '.tif', '.avif', '.heic', '.heif'
+  ];
+  const fileExtension = path.extname(file.originalname).toLowerCase();
+  
+  if (allowedExtensions.includes(fileExtension)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only image files are allowed (PNG, JPG, JPEG, GIF, BMP, WEBP, SVG, ICO, TIFF, AVIF, HEIC, HEIF)'));
+  }
 };
 
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: parseInt(process.env.MAX_FILE_SIZE || '52428800') // 50MB default
+    fileSize: parseInt(process.env.MAX_FILE_SIZE || '1048576000') // 1GB default - accept any photo size
   },
   fileFilter: fileFilter
 });

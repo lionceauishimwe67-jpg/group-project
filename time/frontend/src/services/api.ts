@@ -1,7 +1,8 @@
 import axios, { AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios';
 import { ApiResponse } from '../types';
+import { API_ORIGIN } from './network';
 
-const API_URL = process.env.REACT_APP_API_URL || '';
+const API_URL = API_ORIGIN;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000;
 
@@ -353,8 +354,10 @@ export const smartTimetableApi = {
   },
   validateChronogram: (uploadId: number) =>
     api.post('/api/smart-timetable/validate', { uploadId }),
-  generateTimetable: (uploadId: number, classId: number, config?: any) =>
-    api.post('/api/smart-timetable/generate', { uploadId, classId, ...config }),
+  generateTimetable: (uploadId: number, classId: number) =>
+    api.post('/api/smart-timetable/generate', { uploadId, classId }),
+  generateFromChronogram: (payload: any) =>
+    api.post('/api/smart-timetable/generate-from-chronogram', payload),
   saveTimetable: (generationId: number, replaceExisting = true) =>
     api.post('/api/smart-timetable/save', { generationId, replaceExisting }),
   getRealTime: () => api.get('/api/smart-timetable/real-time'),

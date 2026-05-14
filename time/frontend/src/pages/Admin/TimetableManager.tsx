@@ -13,6 +13,9 @@ const TimetableManager: React.FC = () => {
   const [editingEntry, setEditingEntry] = useState<TimetableEntry | null>(null);
   const [status, setStatus] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -158,6 +161,24 @@ const TimetableManager: React.FC = () => {
     }
   };
 
+  const handleDeleteAll = async () => {
+    if (!window.confirm('⚠️ Are you sure you want to delete ALL timetable entries? This cannot be undone!')) return;
+    if (!window.confirm('This will permanently delete every single entry. Are you absolutely sure?')) return;
+
+    try {
+      setLoading(true);
+      setStatus('Deleting all timetable entries...');
+      const res = await timetableApi.deleteAll();
+      const count = res.data?.data?.deletedCount || res.data?.message || 'all';
+      setStatus(`Successfully deleted ${count} timetable entries.`);
+      loadData();
+    } catch (err: any) {
+      setStatus(`Error: ${err.response?.data?.error || 'Failed to delete all entries'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleCancel = () => {
     setFormData({
       class_name: '',
@@ -173,6 +194,28 @@ const TimetableManager: React.FC = () => {
     setEditingEntry(null);
     setIsModalOpen(false);
     setStatus('Cancelled');
+  };
+
+  const handleImport = async () => {
+    if (!importFile) {
+      setStatus('Please select a file to import');
+      return;
+    }
+
+    try {
+      setImporting(true);
+      setStatus('Importing timetable data...');
+      const response = await timetableApi.batchImport(importFile);
+      setStatus(`Import completed: ${response.data.data.imported} entries imported${response.data.data.errors > 0 ? ` with ${response.data.data.errors} errors` : ''}`);
+      setImportFile(null);
+      setIsImportModalOpen(false);
+      loadData();
+      setTimeout(() => setStatus('Timetable entries loaded successfully.'), 3000);
+    } catch (err: any) {
+      setStatus(`Error: ${err.response?.data?.error || 'Failed to import'}`);
+    } finally {
+      setImporting(false);
+    }
   };
 
   // Get unique class levels for grouping
@@ -242,6 +285,14 @@ const TimetableManager: React.FC = () => {
             <button onClick={openAddModal}>
               + Add Entry
             </button>
+            <button onClick={() => setIsImportModalOpen(true)}>
+              📥 Import Excel
+            </button>
+            {entries.length > 0 && (
+              <button onClick={handleDeleteAll} className="delete" style={{ marginLeft: '8px' }}>
+                🗑️ Delete All
+              </button>
+            )}
           </div>
 
           <div className="timetable-grid">
@@ -392,6 +443,36 @@ const TimetableManager: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        )}
+
+        {isImportModalOpen && (
+          <div className="timetable-form">
+            <h3>Import Timetable from Excel</h3>
+            <div className="form-group">
+              <label>Excel File *</label>
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+                required
+              />
+              <p style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>
+                File should have columns: Class, Subject, Teacher, Classroom, Start Time, End Time, Day
+              </p>
+            </div>
+            <div className="form-actions">
+              <button type="button" onClick={() => setIsImportModalOpen(false)} className="cancel">
+                Cancel
+              </button>
+              <button 
+                type="button" 
+                onClick={handleImport} 
+                disabled={!importFile || importing}
+              >
+                {importing ? 'Importing...' : 'Import'}
+              </button>
+            </div>
           </div>
         )}
       </div>

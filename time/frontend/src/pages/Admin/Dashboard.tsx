@@ -1,17 +1,66 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { bellApi, timetableApi } from '../../services/api';
+import { useBellSound } from '../../hooks/useBellSound';
 import './Dashboard.css';
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
+  const [subjects, setSubjects] = useState<any[]>([]);
+  const [loadingSubjects, setLoadingSubjects] = useState(true);
+  const [triggeringBell, setTriggeringBell] = useState(false);
+  const [bellTriggered, setBellTriggered] = useState(false);
+
+  useEffect(() => {
+    loadSubjects();
+  }, []);
+
+  const loadSubjects = async () => {
+    try {
+      const refRes = await timetableApi.getReferenceData();
+      const subjectsData = refRes.data.data.subjects || [];
+      setSubjects(subjectsData);
+    } catch (err) {
+      console.error('Failed to load subjects:', err);
+    } finally {
+      setLoadingSubjects(false);
+    }
+  };
+
+  const { playBellSound } = useBellSound();
+
+  const triggerBell = async () => {
+    setTriggeringBell(true);
+    try {
+      await bellApi.triggerManualBell();
+      setBellTriggered(true);
+      playBellSound();
+      setTimeout(() => setBellTriggered(false), 3000);
+    } catch (error) {
+      console.error('Failed to trigger bell:', error);
+      alert('Failed to trigger bell. Please try again.');
+    } finally {
+      setTriggeringBell(false);
+    }
+  };
 
   const quickActions = [
+    {
+      icon: '🔔',
+      title: 'Ring Bell',
+      description: 'Trigger school bell immediately',
+      action: triggerBell,
+      color: '#ef4444',
+      isBell: true,
+      path: undefined,
+    },
     {
       icon: '📅',
       title: 'Manage Timetable',
       description: 'Add, edit, or delete class schedules',
       path: '/admin/timetable',
       color: '#3b82f6',
+      isBell: false,
     },
     {
       icon: '📢',
@@ -19,6 +68,7 @@ const Dashboard: React.FC = () => {
       description: 'Upload and manage display content',
       path: '/admin/announcements',
       color: '#10b981',
+      isBell: false,
     },
     {
       icon: '📺',
@@ -27,6 +77,7 @@ const Dashboard: React.FC = () => {
       path: '/display',
       color: '#8b5cf6',
       external: true,
+      isBell: false,
     },
   ];
 
@@ -75,12 +126,14 @@ const Dashboard: React.FC = () => {
         {quickActions.map((action, index) => (
           <div
             key={index}
-            className="action-card"
+            className={`action-card ${action.isBell ? 'bell-action' : ''} ${bellTriggered && action.isBell ? 'bell-triggered' : ''}`}
             style={{ '--action-color': action.color } as React.CSSProperties}
             onClick={() => {
-              if (action.external) {
+              if (action.isBell && action.action) {
+                action.action();
+              } else if (action.external && action.path) {
                 window.open(action.path, '_blank');
-              } else {
+              } else if (action.path) {
                 navigate(action.path);
               }
             }}
@@ -92,9 +145,48 @@ const Dashboard: React.FC = () => {
               <h3 className="action-title">{action.title}</h3>
               <p className="action-description">{action.description}</p>
             </div>
-            <div className="action-arrow">→</div>
+            {action.isBell ? (
+              <div className="bell-status">
+                {triggeringBell ? <span className="bell-spinner">⏳</span> : bellTriggered ? <span className="bell-success">✓</span> : <span className="action-arrow">→</span>}
+              </div>
+            ) : (
+              <div className="action-arrow">→</div>
+            )}
           </div>
         ))}
+      </div>
+
+      {/* Subjects Section */}
+      <div className="section-title">
+        <span className="section-icon">📚</span>
+        Subjects (Amasomo)
+      </div>
+      <div className="subjects-section">
+        {loadingSubjects ? (
+          <div className="loading-text">Loading subjects...</div>
+        ) : (
+          <>
+            <div className="subjects-summary">
+              <div className="subject-stat">
+                <span className="stat-number">{subjects.length}</span>
+                <span className="stat-label">Total Subjects</span>
+              </div>
+            </div>
+            <div className="subjects-grid">
+              {subjects.slice(0, 20).map((subject) => (
+                <div key={subject.id} className="subject-card">
+                  <div className="subject-icon">📖</div>
+                  <div className="subject-name">{subject.name}</div>
+                </div>
+              ))}
+            </div>
+            {subjects.length > 20 && (
+              <div className="subjects-more">
+                And {subjects.length - 20} more subjects...
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {/* Info Cards */}

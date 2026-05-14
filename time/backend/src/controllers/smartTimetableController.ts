@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { query, queryOne, run, withTransaction, getDb } from '../config/database';
 import { asyncHandler } from '../middleware/errorHandler';
+import { generateTimetableFromChronogram } from './aiTimetableGenerator';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
@@ -10,8 +11,29 @@ import * as XLSX from 'xlsx';
 let pdfParse: any;
 try {
   const mod = require('pdf-parse');
-  pdfParse = typeof mod === 'function' ? mod : (mod.default || mod.parse || mod.pdfParse || null);
-} catch { pdfParse = null; }
+  if (typeof mod === 'function') {
+    pdfParse = mod;
+  } else if (typeof mod.default === 'function') {
+    pdfParse = mod.default;
+  } else if (typeof mod.parse === 'function') {
+    pdfParse = mod.parse;
+  } else if (typeof mod.pdfParse === 'function') {
+    pdfParse = mod.pdfParse;
+  } else if (typeof mod.PDFParse === 'function') {
+    pdfParse = async (data: any) => {
+      const parser = new mod.PDFParse({ data: Buffer.isBuffer(data) ? data : Buffer.from(data) });
+      try {
+        return await parser.getText();
+      } finally {
+        await parser.destroy?.();
+      }
+    };
+  } else {
+    pdfParse = null;
+  }
+} catch {
+  pdfParse = null;
+}
 let mammoth: any;
 try { mammoth = require('mammoth'); } catch { mammoth = null; }
 let csvParse: any;
@@ -197,8 +219,11 @@ function cleanExtractedText(raw: string): string {
   text = text.replace(/\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}:\d{2}/g, ' ');
   // 6) Remove hex / binary garbage
   text = text.replace(/\b[0-9a-fA-F]{32,}\b/g, ' ');
-  // 7) Collapse whitespace
-  text = text.replace(/\s+/g, ' ');
+  // 7) Preserve line breaks while collapsing excess spaces
+  text = text.replace(/[ \t]+/g, ' ');
+  text = text.replace(/\r?\n[ \t]*/g, '\n');
+  text = text.replace(/\n+/g, '\n');
+  text = text.replace(/ +/g, ' ');
   return text;
 }
 
@@ -279,12 +304,84 @@ function normalizeTime(t: string): string {
   return m ? `${m[1].padStart(2,'0')}:${m[2]}` : t;
 }
 
+function parseTimeRange(value: string): TimeSlot | null {
+  const match = String(value || '').match(/(\d{1,2})[:\.](\d{2})\s*['"]?\s*[-–—~to]+\s*(\d{1,2})[:\.](\d{2})\s*['"]?/i);
+  if (!match) return null;
+  const startTime = `${match[1].padStart(2,'0')}:${match[2]}`;
+  const endTime = `${match[3].padStart(2,'0')}:${match[4]}`;
+  const lower = String(value).toLowerCase();
+  return {
+    label: String(value).trim(),
+    startTime,
+    endTime,
+    isBreak: lower.includes('break'),
+    isLunch: lower.includes('lunch'),
+  };
+}
+
+function parseMachineReadableTimetable(rawText: string): ChronogramData | null {
+  const jsonStart = rawText.indexOf('{');
+  const jsonEnd = rawText.lastIndexOf('}');
+  if (jsonStart < 0 || jsonEnd <= jsonStart) return null;
+
+  try {
+    const jsonText = rawText
+      .slice(jsonStart, jsonEnd + 1)
+      .replace(/^\s*--\s*\d+\s+of\s+\d+\s*--\s*$/gmi, '')
+      .replace(/^\s*MACHINE READABLE SAMPLE\s*$/gmi, '')
+      .replace(/^\s*The same data is included below.*$/gmi, '');
+    const payload = JSON.parse(jsonText);
+    if (!payload || !Array.isArray(payload.subjects) || payload.subjects.length === 0) return null;
+
+    const subjects: ChronogramSubject[] = payload.subjects
+      .map((subject: any) => {
+        const teacherName = Array.isArray(subject.teachers) ? subject.teachers[0] : subject.teacher;
+        const name = String(subject.name || subject.subject || '').trim();
+        if (!name) return null;
+        return {
+          name,
+          periodsPerWeek: Number(subject.periodsPerWeek || subject.hours_per_week || subject.periods || 1),
+          teacherName: teacherName ? String(teacherName).trim() : undefined,
+        };
+      })
+      .filter(Boolean) as ChronogramSubject[];
+
+    const timeSlotValues = Array.isArray(payload.timeSlots)
+      ? payload.timeSlots
+      : Array.isArray(payload.time_slots)
+        ? payload.time_slots
+        : Array.isArray(payload.timetable)
+          ? payload.timetable.map((row: any) => row.time)
+          : [];
+
+    const timeSlots = timeSlotValues
+      .map((slot: any) => parseTimeRange(String(slot || '')))
+      .filter(Boolean) as TimeSlot[];
+
+    const classInfo = payload.class || payload.targetClass || {};
+    return {
+      subjects,
+      timeSlots: timeSlots.length ? timeSlots : [...DEFAULT_TIME_SLOTS],
+      days: Array.isArray(payload.days) && payload.days.length ? payload.days : DAY_ORDER,
+      className: String(classInfo.name || payload.className || '').trim(),
+      rawText: rawText.slice(0, 5000),
+    };
+  } catch {
+    return null;
+  }
+}
+
 // ---------- Parse grid-format timetable: time column + day columns ----------
 function parseChronogramFromText(rawText: string): ChronogramData {
   const text = cleanExtractedText(rawText);
+  const machineReadable = parseMachineReadableTimetable(text);
+  if (machineReadable?.subjects?.length) {
+    return machineReadable;
+  }
+
   const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean).filter(l => !isLikelyMetadataLine(l));
 
-  const subjectMap = new Map<string, { name: string; periods: number; teacherId?: number }>();
+  const subjectMap = new Map<string, { name: string; periods: number; teacherId?: number; teacherName?: string }>();
   const timeSlots: TimeSlot[] = [];
   let className = '';
   const dayOrder: string[] = ['Monday','Tuesday','Wednesday','Thursday','Friday'];
@@ -357,6 +454,65 @@ function parseChronogramFromText(rawText: string): ChronogramData {
     }
   }
 
+  // Special data format: summary tables with classes and teacher-subject-hour rows
+  if (subjectMap.size === 0) {
+    const classHeaderIdx = lines.findIndex(line => /class id/i.test(line));
+    if (classHeaderIdx >= 0) {
+      for (let i = classHeaderIdx + 1; i < lines.length; i++) {
+        const row = lines[i].trim();
+        if (!row || /^teachers?\s+and/i.test(row) || /^scheduling\s+constraints/i.test(row)) break;
+        const classMatch = row.match(/^\d+\s+([A-Z0-9]+)\s+/i);
+        if (classMatch) {
+          className = classMatch[1].trim();
+          break;
+        }
+      }
+    }
+
+    const teacherHeaderIdx = lines.findIndex(line => {
+      const lower = line.toLowerCase();
+      if (lower.includes('scheduling') || (lower.includes('classes') && lower.includes('availability'))) {
+        return false;
+      }
+      return (/teacher/i.test(line) && /subject/i.test(line)) || (/teacher/i.test(line) && /availability/i.test(line));
+    });
+    if (teacherHeaderIdx >= 0) {
+      for (let i = teacherHeaderIdx + 1; i < lines.length; i++) {
+        const row = lines[i].trim();
+        if (!row || /^scheduling\s+constraints/i.test(row) || /^expected\s+ai\s+features/i.test(row)) break;
+
+        const parts = row.split(/\s+/);
+        if (parts.length < 4) continue;
+
+        const hasFullDayAvailability = parts.length >= 5 && `${parts[parts.length - 2]} ${parts[parts.length - 1]}`.toLowerCase() === 'full day';
+        const availability = hasFullDayAvailability ? 'Full Day' : parts[parts.length - 1];
+        const hoursIndex = hasFullDayAvailability ? parts.length - 3 : parts.length - 2;
+        const hours = parseInt(parts[hoursIndex], 10);
+        if (Number.isNaN(hours)) continue;
+
+        const rest = parts.slice(0, hoursIndex);
+        if (rest.length < 2) continue;
+
+        const teacherName = rest.slice(0, 2).join(' ');
+        const subjectName = rest.slice(2).join(' ');
+        if (!subjectName) continue;
+
+        const key = subjectName.toUpperCase();
+        const existing = subjectMap.get(key);
+        if (!existing) {
+          subjectMap.set(key, {
+            name: subjectName,
+            periods: hours,
+            teacherName,
+          });
+        } else {
+          existing.periods += hours;
+          if (!existing.teacherName) existing.teacherName = teacherName;
+        }
+      }
+    }
+  }
+
   // Fallback: if no grid detected, use basic line-by-line parsing for time slots
   if (timeSlots.length === 0) {
     for (const line of lines) {
@@ -376,7 +532,7 @@ function parseChronogramFromText(rawText: string): ChronogramData {
 
   // Extract class name from level/grade text
   const classMatch = text.match(/(?:level|class|grade|promotion)\s*(?:[:=]|\s)\s*([A-Z0-9\s\-/]{2,80})/i);
-  if (classMatch) className = classMatch[1].trim();
+  if (classMatch && !className) className = classMatch[1].trim();
   // Also match formats like "LEVEL III NETWORKING AND INTERNET TECHNOLOGIES"
   const levelDeptMatch = text.match(/LEVEL\s+([IVX]+|\d+)\s+([A-Z][A-Z\s&\-/]{2,80})/i);
   if (levelDeptMatch && !className) {
@@ -394,6 +550,7 @@ function parseChronogramFromText(rawText: string): ChronogramData {
       name: s.name,
       periodsPerWeek: s.periods,
       teacherNumber: s.teacherId ? String(s.teacherId) : undefined,
+      teacherName: s.teacherName,
     });
   }
 
@@ -407,7 +564,7 @@ function parseChronogramFromText(rawText: string): ChronogramData {
 }
 
 function parseChronogramFromRows(rows: any[]): ChronogramData {
-  const subjectMap = new Map<string, { name: string; periods: number; teacherId?: number }>();
+  const subjectMap = new Map<string, { name: string; periods: number; teacherId?: number; teacherName?: string }>();
   const timeSlots: TimeSlot[] = [];
   const days: string[] = [];
   let className = '';
@@ -579,7 +736,7 @@ function parseChronogramFromRows(rows: any[]): ChronogramData {
   return { subjects, timeSlots: timeSlots.length ? timeSlots : [...DEFAULT_TIME_SLOTS], days: days.length ? days : ['Monday','Tuesday','Wednesday','Thursday','Friday'], className };
 }
 
-// Core AI smart generation algorithm
+// Enhanced AI timetable generator with constraint satisfaction and backtracking
 async function generateSmartTimetableAlgorithm(
   chronogram: ChronogramData,
   classId: number,
@@ -592,6 +749,15 @@ async function generateSmartTimetableAlgorithm(
   const { subjects, timeSlots } = chronogram;
   const workingDays = [1, 2, 3, 4, 5]; // Mon-Fri
   const nonBreakSlots = timeSlots.filter(s => !s.isBreak && !s.isLunch);
+
+  // Debug: Log chronogram structure
+  console.log('DEBUG: Chronogram received:', {
+    className: chronogram.className,
+    subjectsCount: subjects?.length || 0,
+    timeSlotsCount: timeSlots?.length || 0,
+    subjects: subjects?.slice(0, 3) || [],
+    timeSlots: timeSlots?.slice(0, 3) || []
+  });
 
   if (subjects.length === 0) {
     return { entries, conflicts: ['No subjects found in chronogram'], warnings };
@@ -606,7 +772,7 @@ async function generateSmartTimetableAlgorithm(
       s.name.toLowerCase().includes(sub.name?.toLowerCase())
     );
     if (!dbSubject) {
-      // Try fuzzy
+      // Try fuzzy matching
       dbSubject = referenceData.subjects.find((sub: any) => {
         const a = sub.name?.toLowerCase().replace(/[^a-z0-9]/g, '') || '';
         const b = s.name.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -639,7 +805,7 @@ async function generateSmartTimetableAlgorithm(
     return { ...s, dbSubject, dbTeacher };
   });
 
-  // Validate teachers
+  // Validate teachers and subjects
   for (const ms of mappedSubjects) {
     if (!ms.dbSubject) {
       warnings.push(`Subject "${ms.name}" not found in database. It will be created or skipped.`);
@@ -649,117 +815,199 @@ async function generateSmartTimetableAlgorithm(
     }
   }
 
-  // Determine priority: core subjects first
-  const prioritized = [...mappedSubjects].sort((a, b) => {
+  // Filter out unmapped subjects and teachers
+  const validSubjects = mappedSubjects.filter(ms => ms.dbSubject && ms.dbTeacher);
+  if (validSubjects.length === 0) {
+    return { entries, conflicts: ['No valid subject-teacher pairs found'], warnings };
+  }
+
+  // Priority: core subjects first, then by hours
+  const CORE_SUBJECTS = ['MATH', 'ENGLISH', 'FRENCH', 'PHYSICS', 'CHEMISTRY', 'BIOLOGY'];
+  const prioritized = [...validSubjects].sort((a, b) => {
     const aCore = CORE_SUBJECTS.some(c => a.name.toLowerCase().includes(c)) ? 1 : 0;
     const bCore = CORE_SUBJECTS.some(c => b.name.toLowerCase().includes(c)) ? 1 : 0;
     if (bCore !== aCore) return bCore - aCore;
     return (b.periodsPerWeek || 0) - (a.periodsPerWeek || 0);
   });
 
-  // Track used slots per day per teacher and per classroom
-  const teacherDayPeriods = new Map<number, Map<number, number>>(); // teacherId -> day -> count
-  const teacherSlotUsed = new Map<string, Set<string>>(); // teacherId -> Set<"day-start-end">
-  const classroomSlotUsed = new Map<string, Set<string>>(); // classroomId -> Set<"day-start-end">
-  const subjectDayPeriods = new Map<number, Map<number, number>>(); // subjectId -> day -> count
+  // Conflict tracking structures
+  const teacherSlots = new Map<number, Set<string>>(); // teacherId -> Set<"day-start-end">
+  const classroomSlots = new Map<number, Set<string>>(); // classroomId -> Set<"day-start-end">
+  const subjectDayCounts = new Map<number, Map<number, number>>(); // subjectId -> day -> count
+  const teacherDayCounts = new Map<number, Map<number, number>>(); // teacherId -> day -> count
 
-  function getTeacherCount(teacherId: number, day: number) {
-    if (!teacherDayPeriods.has(teacherId)) teacherDayPeriods.set(teacherId, new Map());
-    return teacherDayPeriods.get(teacherId)!.get(day) || 0;
-  }
-  function incTeacherCount(teacherId: number, day: number) {
-    if (!teacherDayPeriods.has(teacherId)) teacherDayPeriods.set(teacherId, new Map());
-    const m = teacherDayPeriods.get(teacherId)!;
-    m.set(day, (m.get(day) || 0) + 1);
-  }
-  function getSubjectCount(subjectId: number, day: number) {
-    if (!subjectDayPeriods.has(subjectId)) subjectDayPeriods.set(subjectId, new Map());
-    return subjectDayPeriods.get(subjectId)!.get(day) || 0;
-  }
-  function incSubjectCount(subjectId: number, day: number) {
-    if (!subjectDayPeriods.has(subjectId)) subjectDayPeriods.set(subjectId, new Map());
-    const m = subjectDayPeriods.get(subjectId)!;
-    m.set(day, (m.get(day) || 0) + 1);
-  }
-  function isSlotUsedByTeacher(teacherId: number, day: number, slot: TimeSlot) {
-    const key = `${teacherId}`;
-    if (!teacherSlotUsed.has(key)) teacherSlotUsed.set(key, new Set());
-    return teacherSlotUsed.get(key)!.has(`${day}-${slot.startTime}-${slot.endTime}`);
-  }
-  function markTeacherSlot(teacherId: number, day: number, slot: TimeSlot) {
-    const key = `${teacherId}`;
-    if (!teacherSlotUsed.has(key)) teacherSlotUsed.set(key, new Set());
-    teacherSlotUsed.get(key)!.add(`${day}-${slot.startTime}-${slot.endTime}`);
-  }
-  function isSlotUsedByClassroom(classroomId: number, day: number, slot: TimeSlot) {
-    const key = `${classroomId}`;
-    if (!classroomSlotUsed.has(key)) classroomSlotUsed.set(key, new Set());
-    return classroomSlotUsed.get(key)!.has(`${day}-${slot.startTime}-${slot.endTime}`);
-  }
-  function markClassroomSlot(classroomId: number, day: number, slot: TimeSlot) {
-    const key = `${classroomId}`;
-    if (!classroomSlotUsed.has(key)) classroomSlotUsed.set(key, new Set());
-    classroomSlotUsed.get(key)!.add(`${day}-${slot.startTime}-${slot.endTime}`);
+  // Helper functions
+  function isSlotAvailable(teacherId: number, classroomId: number, day: number, slot: TimeSlot): boolean {
+    const slotKey = `${day}-${slot.startTime}-${slot.endTime}`;
+    return !teacherSlots.get(teacherId)?.has(slotKey) && 
+           !classroomSlots.get(classroomId)?.has(slotKey);
   }
 
-  // Auto-assign classroom: pick first available or create generic
-  let defaultClassroomId = referenceData.classrooms[0]?.id || 1;
+  function markSlot(teacherId: number, classroomId: number, day: number, slot: TimeSlot) {
+    const slotKey = `${day}-${slot.startTime}-${slot.endTime}`;
+    if (!teacherSlots.has(teacherId)) teacherSlots.set(teacherId, new Set());
+    if (!classroomSlots.has(classroomId)) classroomSlots.set(classroomId, new Set());
+    teacherSlots.get(teacherId)!.add(slotKey);
+    classroomSlots.get(classroomId)!.add(slotKey);
+  }
 
-  for (const ms of prioritized) {
-    let remaining = ms.periodsPerWeek || 2;
-    if (!ms.dbSubject) {
-      warnings.push(`Skipping "${ms.name}" - no matching subject in database.`);
-      continue;
-    }
+  function getSubjectDayCount(subjectId: number, day: number): number {
+    return subjectDayCounts.get(subjectId)?.get(day) || 0;
+  }
 
-    const subjectId = ms.dbSubject.id;
-    const teacherId = ms.dbTeacher?.id || 0;
+  function incSubjectDayCount(subjectId: number, day: number) {
+    if (!subjectDayCounts.has(subjectId)) subjectDayCounts.set(subjectId, new Map());
+    const dayMap = subjectDayCounts.get(subjectId)!;
+    dayMap.set(day, (dayMap.get(day) || 0) + 1);
+  }
 
-    if (teacherId === 0) {
-      conflicts.push(`No teacher assigned for "${ms.name}" - cannot schedule.`);
-      continue;
-    }
+  function getTeacherDayCount(teacherId: number, day: number): number {
+    return teacherDayCounts.get(teacherId)?.get(day) || 0;
+  }
 
-    // Distribute across days, max 3 per day per subject
-    for (const day of workingDays) {
-      if (remaining <= 0) break;
-      if (getSubjectCount(subjectId, day) >= 3) continue;
+  function incTeacherDayCount(teacherId: number, day: number) {
+    if (!teacherDayCounts.has(teacherId)) teacherDayCounts.set(teacherId, new Map());
+    const dayMap = teacherDayCounts.get(teacherId)!;
+    dayMap.set(day, (dayMap.get(day) || 0) + 1);
+  }
 
-      for (const slot of nonBreakSlots) {
-        if (remaining <= 0) break;
-        if (getSubjectCount(subjectId, day) >= 3) break;
+  // Backtracking algorithm for optimal placement
+  function scheduleSubject(subjectIndex: number, dayIndex: number, slotIndex: number): boolean {
+    if (subjectIndex >= prioritized.length) return true;
 
-        const slotKey = `${day}-${slot.startTime}-${slot.endTime}`;
-        if (isSlotUsedByTeacher(teacherId, day, slot)) continue;
-        if (isSlotUsedByClassroom(defaultClassroomId, day, slot)) {
-          // Try find another classroom
-          let altClassroom = referenceData.classrooms.find((c: any) => !isSlotUsedByClassroom(c.id, day, slot));
-          if (!altClassroom) continue;
-          defaultClassroomId = altClassroom.id;
+    const subject = prioritized[subjectIndex];
+    const requiredHours = subject.periodsPerWeek || 2;
+    const subjectId = subject.dbSubject!.id;
+    const teacherId = subject.dbTeacher!.id;
+
+    // Try each day starting from dayIndex
+    for (let d = dayIndex; d < workingDays.length; d++) {
+      const day = workingDays[d];
+      
+      // Skip if subject already has max periods per day (3)
+      if (getSubjectDayCount(subjectId, day) >= 3) continue;
+      
+      // Skip if teacher already has max periods per day (6)
+      if (getTeacherDayCount(teacherId, day) >= 6) continue;
+
+      // Try each slot starting from slotIndex
+      for (let s = (d === dayIndex ? slotIndex : 0); s < nonBreakSlots.length; s++) {
+        const slot = nonBreakSlots[s];
+        
+        // Check availability
+        let classroomId = referenceData.classrooms[0]?.id || 1;
+        let foundClassroom = false;
+        
+        for (const classroom of referenceData.classrooms) {
+          if (isSlotAvailable(teacherId, classroom.id, day, slot)) {
+            classroomId = classroom.id;
+            foundClassroom = true;
+            break;
+          }
         }
+        
+        if (!foundClassroom) continue;
 
-        // Place lesson
-        entries.push({
+        // Place the lesson
+        const entry: TimetableEntryInput = {
           day_of_week: day,
           start_time: slot.startTime,
           end_time: slot.endTime,
           class_id: classId,
           subject_id: subjectId,
           teacher_id: teacherId,
-          classroom_id: defaultClassroomId,
-        });
+          classroom_id: classroomId,
+        };
 
-        incSubjectCount(subjectId, day);
-        incTeacherCount(teacherId, day);
-        markTeacherSlot(teacherId, day, slot);
-        markClassroomSlot(defaultClassroomId, day, slot);
-        remaining--;
+        entries.push(entry);
+        markSlot(teacherId, classroomId, day, slot);
+        incSubjectDayCount(subjectId, day);
+        incTeacherDayCount(teacherId, day);
+
+        // Recursively schedule remaining subjects
+        if (scheduleSubject(subjectIndex + 1, d, s + 1)) {
+          return true;
+        }
+
+        // Backtrack
+        entries.pop();
+        const slotKey = `${day}-${slot.startTime}-${slot.endTime}`;
+        teacherSlots.get(teacherId)?.delete(slotKey);
+        classroomSlots.get(classroomId)?.delete(slotKey);
+        const dayMap = subjectDayCounts.get(subjectId);
+        if (dayMap) {
+          dayMap.set(day, dayMap.get(day)! - 1);
+          if (dayMap.get(day) === 0) dayMap.delete(day);
+        }
+        const teacherDayMap = teacherDayCounts.get(teacherId);
+        if (teacherDayMap) {
+          teacherDayMap.set(day, teacherDayMap.get(day)! - 1);
+          if (teacherDayMap.get(day) === 0) teacherDayMap.delete(day);
+        }
       }
     }
 
-    if (remaining > 0) {
-      conflicts.push(`Could not place ${remaining} periods for "${ms.name}" - insufficient slots or constraints.`);
+    return false;
+  }
+
+  // Greedy fallback if backtracking fails
+  function greedySchedule() {
+    for (const subject of prioritized) {
+      let remaining = subject.periodsPerWeek || 2;
+      const subjectId = subject.dbSubject!.id;
+      const teacherId = subject.dbTeacher!.id;
+
+      for (const day of workingDays) {
+        if (remaining <= 0) break;
+        if (getSubjectDayCount(subjectId, day) >= 3) continue;
+        if (getTeacherDayCount(teacherId, day) >= 6) continue;
+
+        for (const slot of nonBreakSlots) {
+          if (remaining <= 0) break;
+          if (getSubjectDayCount(subjectId, day) >= 3) break;
+
+          let classroomId = referenceData.classrooms[0]?.id || 1;
+          let foundClassroom = false;
+          
+          for (const classroom of referenceData.classrooms) {
+            if (isSlotAvailable(teacherId, classroom.id, day, slot)) {
+              classroomId = classroom.id;
+              foundClassroom = true;
+              break;
+            }
+          }
+          
+          if (!foundClassroom) continue;
+
+          const entry: TimetableEntryInput = {
+            day_of_week: day,
+            start_time: slot.startTime,
+            end_time: slot.endTime,
+            class_id: classId,
+            subject_id: subjectId,
+            teacher_id: teacherId,
+            classroom_id: classroomId,
+          };
+
+          entries.push(entry);
+          markSlot(teacherId, classroomId, day, slot);
+          incSubjectDayCount(subjectId, day);
+          incTeacherDayCount(teacherId, day);
+          remaining--;
+        }
+      }
+
+      if (remaining > 0) {
+        conflicts.push(`Could not place ${remaining} periods for "${subject.name}" - insufficient slots or constraints.`);
+      }
     }
+  }
+
+  // Try backtracking first, fallback to greedy
+  const success = scheduleSubject(0, 0, 0);
+  if (!success) {
+    entries.length = 0; // Clear entries from failed backtracking
+    greedySchedule();
   }
 
   return { entries, conflicts, warnings };
@@ -828,10 +1076,22 @@ export const uploadChronogram = asyncHandler(async (req: Request, res: Response)
 
     // Use first class as primary chronogram for backward compatibility
     const chronogram: ChronogramData = multiClassChronogram.classes[0] || {
-      subjects: [], timeSlots: [...DEFAULT_TIME_SLOTS], days: DAY_ORDER, className: ''
+      subjects: [],
+      timeSlots: [...DEFAULT_TIME_SLOTS],
+      days: DAY_ORDER,
+      className: ''
     };
 
-    // Update record with extracted data (store multi-class data)
+    // Check if subjects were found
+    if (!chronogram.subjects || chronogram.subjects.length === 0) {
+      console.warn('No subjects found in uploaded chronogram. This usually means the file format is not supported or does not contain a timetable grid.');
+      return res.status(400).json({
+        success: false,
+        error: 'No subjects found in the uploaded file. Please ensure you upload a timetable file containing a timetable grid with subjects and time slots.'
+      });
+    }
+
+    // Update record with extracted data
     await run(
       `UPDATE chronogram_uploads SET extracted_data = ?, analysis_status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
       [JSON.stringify(multiClassChronogram), uploadId]
@@ -870,6 +1130,13 @@ export const validateChronogramData = asyncHandler(async (req: Request, res: Res
   let multiClassChronogram: MultiClassChronogram | null = null;
   try {
     const parsed = JSON.parse(upload.extracted_data);
+    console.log('DEBUG: Parsed chronogram data:', {
+      hasClasses: !!parsed.classes,
+      classesCount: parsed.classes?.length || 0,
+      firstClassSubjects: parsed.classes?.[0]?.subjects?.length || 0,
+      firstClassName: parsed.classes?.[0]?.className || 'N/A'
+    });
+    
     // Check if it's multi-class format
     if (parsed.classes && Array.isArray(parsed.classes)) {
       multiClassChronogram = parsed as MultiClassChronogram;
@@ -925,10 +1192,17 @@ export const validateChronogramData = asyncHandler(async (req: Request, res: Res
         t.phone?.includes(s.teacherNumber!) || t.id === parseInt(s.teacherNumber!, 10)
       );
     }
+    if (!dbTeacher && s.teacherName) {
+      dbTeacher = teachers.find((t: any) =>
+        t.name?.toLowerCase() === s.teacherName!.toLowerCase() ||
+        t.name?.toLowerCase().includes(s.teacherName!.toLowerCase()) ||
+        s.teacherName!.toLowerCase().includes(t.name?.toLowerCase())
+      );
+    }
     if (dbTeacher) {
       matchedTeachers.push({ chronogramSubject: s, dbTeacher });
     } else {
-      warnings.push(`Teacher ${s.teacherNumber || 'unknown'} for "${s.name}" not found.`);
+      warnings.push(`Teacher ${s.teacherName || s.teacherNumber || 'unknown'} for "${s.name}" not found.`);
       if (s.teacherNumber) {
         validationErrors.push({ type: 'missing_teacher', message: `Teacher number "${s.teacherNumber}" for "${s.name}" not found`, detail: s });
       }
@@ -1014,8 +1288,8 @@ export const generateSmartTimetable = asyncHandler(async (req: Request, res: Res
 
   const referenceData = { teachers, subjects, classrooms, teacherSubjects } as { teachers: any[]; subjects: any[]; classrooms: any[]; teacherSubjects: any[] };
 
-  // Run generation
-  const { entries, conflicts, warnings } = await generateSmartTimetableAlgorithm(chronogram, classId, referenceData);
+  // Run generation using enhanced AI algorithm
+  const { entries, conflicts, warnings } = await generateTimetableFromChronogram(chronogram, classId, referenceData);
 
   // Save generation record
   const genResult = await run(

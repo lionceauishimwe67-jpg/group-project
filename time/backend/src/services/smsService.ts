@@ -239,3 +239,117 @@ export const sendSMSNotificationToTeacher = async (
     };
   }
 };
+
+// Send SMS to all active phone numbers
+export const sendSMSToAllPhoneNumbers = async (
+  message: string,
+  notificationType: string = 'general'
+): Promise<{ success: boolean; sent: number; failed: number; errors: string[] }> => {
+  try {
+    const { query } = await import('../config/database');
+    
+    // Get all active phone numbers
+    const phoneNumbers = await query<any[]>(
+      'SELECT id, phone_number, name FROM phone_numbers WHERE is_active = 1'
+    );
+
+    if (phoneNumbers.length === 0) {
+      return { success: true, sent: 0, failed: 0, errors: ['No active phone numbers'] };
+    }
+
+    let sent = 0;
+    let failed = 0;
+    const errors: string[] = [];
+
+    for (const phone of phoneNumbers) {
+      try {
+        const result = await sendSMS(phone.phone_number, message);
+        
+        if (result.success) {
+          sent++;
+          console.log(`SMS sent to ${phone.phone_number} (${phone.name || 'No name'})`);
+        } else {
+          failed++;
+          errors.push(`${phone.phone_number}: ${result.error}`);
+          console.error(`Failed to send SMS to ${phone.phone_number}: ${result.error}`);
+        }
+      } catch (error: any) {
+        failed++;
+        errors.push(`${phone.phone_number}: ${error.message}`);
+        console.error(`Error sending SMS to ${phone.phone_number}:`, error);
+      }
+    }
+
+    return {
+      success: true,
+      sent,
+      failed,
+      errors,
+    };
+  } catch (error: any) {
+    console.error('Error sending SMS to all phone numbers:', error);
+    return {
+      success: false,
+      sent: 0,
+      failed: 0,
+      errors: [error.message || 'Failed to send SMS to all phone numbers'],
+    };
+  }
+};
+
+// Send SMS to teachers who have SMS notifications enabled
+export const sendSMSToTeachers = async (
+  message: string,
+  notificationType: string = 'general'
+): Promise<{ success: boolean; sent: number; failed: number; errors: string[] }> => {
+  try {
+    const { query } = await import('../config/database');
+    
+    // Get all teachers with SMS notifications enabled and phone numbers
+    const teachers = await query<any[]>(
+      'SELECT id, name, phone FROM teachers WHERE sms_notification_enabled = 1 AND phone IS NOT NULL AND phone != ""'
+    );
+
+    if (teachers.length === 0) {
+      return { success: true, sent: 0, failed: 0, errors: ['No teachers with SMS notifications enabled'] };
+    }
+
+    let sent = 0;
+    let failed = 0;
+    const errors: string[] = [];
+
+    for (const teacher of teachers) {
+      try {
+        const result = await sendSMS(teacher.phone, message);
+        
+        if (result.success) {
+          sent++;
+          console.log(`SMS sent to teacher ${teacher.name} (${teacher.phone})`);
+        } else {
+          failed++;
+          errors.push(`${teacher.name} (${teacher.phone}): ${result.error}`);
+          console.error(`Failed to send SMS to teacher ${teacher.name}: ${result.error}`);
+        }
+      } catch (error: any) {
+        failed++;
+        errors.push(`${teacher.name} (${teacher.phone}): ${error.message}`);
+        console.error(`Error sending SMS to teacher ${teacher.name}:`, error);
+      }
+    }
+
+    return {
+      success: true,
+      sent,
+      failed,
+      errors,
+    };
+  } catch (error: any) {
+    console.error('Error sending SMS to teachers:', error);
+    return {
+      success: false,
+      sent: 0,
+      failed: 0,
+      errors: [error.message || 'Failed to send SMS to teachers'],
+    };
+  }
+};

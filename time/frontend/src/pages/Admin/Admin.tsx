@@ -33,6 +33,22 @@ const Admin: React.FC = () => {
             <span className="nav-icon">🗓️</span>
             Manage Timetable
           </NavLink>
+          <NavLink to="/admin/timetable-generator" className="nav-item">
+            <span className="nav-icon">⚙️</span>
+            Timetable Generator
+          </NavLink>
+          <NavLink to="/admin/smart-timetable" className="nav-item">
+            <span className="nav-icon">AI</span>
+            Smart Timetable
+          </NavLink>
+          <NavLink to="/admin/timetable/view" className="nav-item">
+            <span className="nav-icon">📋</span>
+            View Full Timetable
+          </NavLink>
+          <NavLink to="/admin/schedule" className="nav-item">
+            <span className="nav-icon">⏰</span>
+            Schedule Management
+          </NavLink>
           <NavLink to="/admin/teachers" className="nav-item">
             <span className="nav-icon">👨‍🏫</span>
             Teacher Profiles
@@ -40,6 +56,18 @@ const Admin: React.FC = () => {
           <NavLink to="/admin/announcements" className="nav-item">
             <span className="nav-icon">📢</span>
             Announcements
+          </NavLink>
+          <NavLink to="/admin/phone-numbers" className="nav-item">
+            <span className="nav-icon">📱</span>
+            Phone Numbers (SMS)
+          </NavLink>
+          <NavLink to="/admin/school-events" className="nav-item">
+            <span className="nav-icon">📅</span>
+            School Events
+          </NavLink>
+          <NavLink to="/admin/profile" className="nav-item">
+            <span className="nav-icon">👤</span>
+            My Profile
           </NavLink>
           <NavLink to="/manager" className="nav-item">
             <span className="nav-icon">👔</span>
