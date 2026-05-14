@@ -40,7 +40,7 @@ const checkNotificationTriggers = async () => {
 
   const entries = await query<any[]>(
     `SELECT tt.id, tt.teacher_id, tt.start_time, tt.end_time, tt.day_of_week, tt.status,
-       t.name AS teacher_name, c.name AS class_name, s.name AS subject_name, cl.name AS classroom_name
+       t.name AS teacher_name, t.email AS teacher_email, c.name AS class_name, s.name AS subject_name, cl.name AS classroom_name
     FROM timetable tt
     JOIN teachers t ON tt.teacher_id = t.id
     JOIN classes c ON tt.class_id = c.id

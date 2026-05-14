@@ -222,6 +222,7 @@ export const initDatabase = async (): Promise<Database<sqlite3.Database, sqlite3
     await db.run(`INSERT OR IGNORE INTO system_state (key, value) VALUES ('manual_ring', 'false')`);
     await db.run(`INSERT OR IGNORE INTO system_state (key, value) VALUES ('current_session', 'null')`);
     await db.run(`INSERT OR IGNORE INTO system_state (key, value) VALUES ('next_bell_time', 'null')`);
+    await ensureEmailNotificationColumns(db);
     // Seed classes
     const seedClasses = [
       ['L3NIT', 'L3'], ['L3SWD', 'L3'], ['L3FAD', 'L3'],
@@ -317,6 +318,7 @@ export const initDatabase = async (): Promise<Database<sqlite3.Database, sqlite3
   await db.run(`CREATE INDEX IF NOT EXISTS idx_timetable_generations_current ON timetable_generations(is_current)`);
   await db.run(`CREATE INDEX IF NOT EXISTS idx_teacher_constraints_teacher ON teacher_constraints(teacher_id)`);
   await db.run(`CREATE INDEX IF NOT EXISTS idx_subject_priorities_level ON subject_priorities(priority_level)`);
+  await ensureEmailNotificationColumns(db);
 
   // Ensure seed classes exist (safe to run every time due to INSERT OR IGNORE)
   const seedClasses = [
@@ -330,6 +332,37 @@ export const initDatabase = async (): Promise<Database<sqlite3.Database, sqlite3
   }
 
   return db;
+};
+
+const ensureEmailNotificationColumns = async (database: Database<sqlite3.Database, sqlite3.Statement>) => {
+  const teacherColumns = await database.all(`PRAGMA table_info(teachers)`);
+  const hasTeacherColumn = (name: string) => teacherColumns.some((column: any) => column.name === name);
+
+  if (!hasTeacherColumn('notification_enabled')) {
+    await database.run(`ALTER TABLE teachers ADD COLUMN notification_enabled INTEGER DEFAULT 1`);
+  }
+  if (!hasTeacherColumn('notification_advance_minutes')) {
+    await database.run(`ALTER TABLE teachers ADD COLUMN notification_advance_minutes INTEGER DEFAULT 5`);
+  }
+  if (!hasTeacherColumn('device_token')) {
+    await database.run(`ALTER TABLE teachers ADD COLUMN device_token TEXT`);
+  }
+  if (!hasTeacherColumn('sms_notification_enabled')) {
+    await database.run(`ALTER TABLE teachers ADD COLUMN sms_notification_enabled INTEGER DEFAULT 1`);
+  }
+
+  const notificationColumns = await database.all(`PRAGMA table_info(notifications)`);
+  const hasNotificationColumn = (name: string) => notificationColumns.some((column: any) => column.name === name);
+
+  if (!hasNotificationColumn('timetable_id')) {
+    await database.run(`ALTER TABLE notifications ADD COLUMN timetable_id INTEGER`);
+  }
+  if (!hasNotificationColumn('error_message')) {
+    await database.run(`ALTER TABLE notifications ADD COLUMN error_message TEXT`);
+  }
+  if (!hasNotificationColumn('sent_via')) {
+    await database.run(`ALTER TABLE notifications ADD COLUMN sent_via TEXT DEFAULT 'push'`);
+  }
 };
 
 // Test database connection

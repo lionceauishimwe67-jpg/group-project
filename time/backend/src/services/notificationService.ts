@@ -1,6 +1,7 @@
 import admin from 'firebase-admin';
-import { query } from '../config/database';
+import { query, run } from '../config/database';
 import { sendSMSNotificationToTeacher } from './smsService';
+import { sendEmailNotificationToTeacher } from './emailService';
 
 // Initialize Firebase Admin SDK (placeholder - needs actual credentials)
 let firebaseApp: admin.app.App | null = null;
@@ -71,9 +72,8 @@ export const sendNotificationToTeacher = async (
   notificationType: 'class_reminder' | 'class_start' | 'emergency' = 'class_reminder'
 ): Promise<{ success: boolean; messageId?: string; error?: string }> => {
   try {
-    // Get teacher's device token
     const teachers = await query<any[]>(
-      'SELECT id, name, device_token, notification_enabled FROM teachers WHERE id = ?',
+      'SELECT id, name, email, device_token, notification_enabled FROM teachers WHERE id = ?',
       [teacherId]
     );
 
@@ -83,35 +83,55 @@ export const sendNotificationToTeacher = async (
 
     const teacher = teachers[0];
 
-    // Check if notifications are enabled for this teacher
-    if (!teacher.notification_enabled || !teacher.device_token) {
-      console.log(`Notifications disabled or no device token for teacher ${teacher.name}`);
-      return { success: false, error: 'Notifications disabled or no device token' };
+    if (!teacher.notification_enabled) {
+      console.log(`Notifications disabled for teacher ${teacher.name}`);
+      return { success: false, error: 'Notifications disabled' };
     }
 
-    // Send push notification
-    const result = await sendPushNotification(teacher.device_token, title, body, {
-      teacherId: teacher.id.toString(),
-      timetableId: timetableId.toString(),
-      type: notificationType,
-    });
+    let pushResult: { success: boolean; messageId?: string; error?: string } | null = null;
+    if (teacher.device_token) {
+      pushResult = await sendPushNotification(teacher.device_token, title, body, {
+        teacherId: teacher.id.toString(),
+        timetableId: timetableId.toString(),
+        type: notificationType,
+      });
 
-    // Log notification to database
-    if (result.success) {
-      await query(
-        `INSERT INTO notifications (teacher_id, timetable_id, notification_type, title, body, status)
-         VALUES (?, ?, ?, ?, ?, 'sent')`,
-        [teacherId, timetableId, notificationType, title, body]
-      );
-    } else {
-      await query(
-        `INSERT INTO notifications (teacher_id, timetable_id, notification_type, title, body, status, error_message)
-         VALUES (?, ?, ?, ?, ?, 'failed', ?)`,
-        [teacherId, timetableId, notificationType, title, body, result.error]
+      await run(
+        `INSERT INTO notifications
+          (teacher_id, timetable_id, notification_type, title, body, status, error_message, sent_via, sent_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'push', CURRENT_TIMESTAMP)`,
+        [
+          teacherId,
+          timetableId,
+          notificationType,
+          title,
+          body,
+          pushResult.success ? 'sent' : 'failed',
+          pushResult.error || null
+        ]
       );
     }
 
-    return result;
+    const emailResult = await sendEmailNotificationToTeacher(
+      teacherId,
+      title,
+      body,
+      timetableId,
+      notificationType
+    );
+
+    if (emailResult.success) {
+      return emailResult;
+    }
+
+    if (pushResult?.success) {
+      return pushResult;
+    }
+
+    return {
+      success: false,
+      error: emailResult.error || pushResult?.error || 'No notification channel available'
+    };
   } catch (error: any) {
     console.error('Error sending notification to teacher:', error);
     return {
@@ -151,9 +171,9 @@ export const sendNotificationToAdmins = async (
         if (result.success) {
           sentCount++;
           // Log notification (using teacher_id = 0 for admin notifications)
-          await query(
-            `INSERT INTO notifications (teacher_id, timetable_id, notification_type, title, body, status)
-             VALUES (?, ?, ?, ?, ?, 'sent')`,
+          await run(
+            `INSERT INTO notifications (teacher_id, timetable_id, notification_type, title, body, status, sent_via, sent_at)
+             VALUES (?, ?, ?, ?, ?, 'sent', 'push', CURRENT_TIMESTAMP)`,
             [user.id, timetableId, notificationType, title, body]
           );
         } else {

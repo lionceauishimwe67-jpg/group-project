@@ -43,6 +43,7 @@ const checkAndSendNotifications = async () => {
       te.notification_enabled,
       te.notification_advance_minutes,
       te.device_token,
+      te.email,
       t.classroom_id,
       cl.name AS classroom_name,
       substr(t.start_time, 1, 5) AS start_time,
