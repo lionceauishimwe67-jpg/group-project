@@ -220,6 +220,7 @@ export const initDatabase = async (): Promise<Database<sqlite3.Database, sqlite3
     `);
     // Default system state
     await db.run(`INSERT OR IGNORE INTO system_state (key, value) VALUES ('manual_ring', 'false')`);
+    await db.run(`INSERT OR IGNORE INTO system_state (key, value) VALUES ('hardware_ring_command', 'null')`);
     await db.run(`INSERT OR IGNORE INTO system_state (key, value) VALUES ('current_session', 'null')`);
     await db.run(`INSERT OR IGNORE INTO system_state (key, value) VALUES ('next_bell_time', 'null')`);
     await ensureEmailNotificationColumns(db);
@@ -319,6 +320,10 @@ export const initDatabase = async (): Promise<Database<sqlite3.Database, sqlite3
   await db.run(`CREATE INDEX IF NOT EXISTS idx_teacher_constraints_teacher ON teacher_constraints(teacher_id)`);
   await db.run(`CREATE INDEX IF NOT EXISTS idx_subject_priorities_level ON subject_priorities(priority_level)`);
   await ensureEmailNotificationColumns(db);
+  await db.run(`INSERT OR IGNORE INTO system_state (key, value) VALUES ('manual_ring', 'false')`);
+  await db.run(`INSERT OR IGNORE INTO system_state (key, value) VALUES ('hardware_ring_command', 'null')`);
+  await db.run(`INSERT OR IGNORE INTO system_state (key, value) VALUES ('current_session', 'null')`);
+  await db.run(`INSERT OR IGNORE INTO system_state (key, value) VALUES ('next_bell_time', 'null')`);
 
   // Ensure seed classes exist (safe to run every time due to INSERT OR IGNORE)
   const seedClasses = [

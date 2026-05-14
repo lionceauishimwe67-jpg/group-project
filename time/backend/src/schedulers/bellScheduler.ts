@@ -21,6 +21,16 @@ interface BellTrigger {
   scheduleId?: number;
 }
 
+interface HardwareBellCommand {
+  id: string;
+  ring: true;
+  type: BellTrigger['bellType'];
+  reason: string;
+  duration_seconds: number;
+  created_at: string;
+  schedule_id: number | null;
+}
+
 let schedulerInterval: NodeJS.Timeout | null = null;
 let lastCheckedMinute: number = -1;
 
@@ -213,6 +223,8 @@ const shouldTriggerBell = async (
 const triggerBell = async (trigger: BellTrigger) => {
   console.log(`[Bell Scheduler] Triggering bell: ${trigger.bellType} - ${trigger.reason}`);
 
+  await queueHardwareBellCommand(trigger);
+
   // Log bell trigger
   await run(
     `INSERT INTO bell_logs (bell_type, triggered_by, reason, schedule_id) 
@@ -226,6 +238,29 @@ const triggerBell = async (trigger: BellTrigger) => {
     reason: trigger.reason,
     timestamp: new Date().toISOString()
   });
+};
+
+const queueHardwareBellCommand = async (trigger: BellTrigger) => {
+  const command: HardwareBellCommand = {
+    id: `${trigger.bellType}-${Date.now()}`,
+    ring: true,
+    type: trigger.bellType,
+    reason: trigger.reason,
+    duration_seconds: Number(process.env.BELL_DURATION_SECONDS || 15),
+    created_at: new Date().toISOString(),
+    schedule_id: trigger.scheduleId || null
+  };
+
+  await run(
+    `INSERT OR IGNORE INTO system_state (key, value) VALUES ('hardware_ring_command', 'null')`
+  );
+  await run(
+    `UPDATE system_state SET value = ?, updated_at = CURRENT_TIMESTAMP WHERE key = 'hardware_ring_command'`,
+    [JSON.stringify(command)]
+  );
+  await run(
+    `UPDATE system_state SET value = 'true', updated_at = CURRENT_TIMESTAMP WHERE key = 'manual_ring'`
+  );
 };
 
 const updateCurrentSession = async (session: CurrentSession | null) => {
@@ -284,7 +319,12 @@ export const getCurrentSessionState = async (): Promise<CurrentSession | null> =
 
 // Manual bell trigger (API helper)
 export const triggerManualBell = async () => {
-  await run(`UPDATE system_state SET value = 'true', updated_at = CURRENT_TIMESTAMP WHERE key = 'manual_ring'`);
+  const trigger: BellTrigger = {
+    shouldRing: true,
+    bellType: 'manual',
+    reason: 'Manual ring requested by admin'
+  };
+  await queueHardwareBellCommand(trigger);
   await run(
     `INSERT INTO bell_logs (bell_type, triggered_by, reason, schedule_id)
      VALUES ('manual', 'admin', 'Manual ring requested by admin', NULL)`
@@ -295,6 +335,51 @@ export const triggerManualBell = async () => {
     timestamp: new Date().toISOString()
   });
   return { success: true };
+};
+
+export const consumeHardwareBellCommand = async () => {
+  const commands = await query<{ value: string }[]>(
+    `SELECT value FROM system_state WHERE key = 'hardware_ring_command'`
+  );
+
+  if (commands.length > 0 && commands[0].value && commands[0].value !== 'null') {
+    await run(
+      `UPDATE system_state SET value = 'null', updated_at = CURRENT_TIMESTAMP WHERE key = 'hardware_ring_command'`
+    );
+    await run(
+      `UPDATE system_state SET value = 'false', updated_at = CURRENT_TIMESTAMP WHERE key = 'manual_ring'`
+    );
+
+    try {
+      return JSON.parse(commands[0].value);
+    } catch {
+      return {
+        ring: true,
+        type: 'manual',
+        reason: 'Bell command',
+        duration_seconds: Number(process.env.BELL_DURATION_SECONDS || 15)
+      };
+    }
+  }
+
+  const legacyFlag = await query<{ value: string }[]>(
+    `SELECT value FROM system_state WHERE key = 'manual_ring'`
+  );
+  const shouldRing = legacyFlag.length > 0 && legacyFlag[0].value === 'true';
+
+  if (shouldRing) {
+    await run(
+      `UPDATE system_state SET value = 'false', updated_at = CURRENT_TIMESTAMP WHERE key = 'manual_ring'`
+    );
+    return {
+      ring: true,
+      type: 'manual',
+      reason: 'Manual ring requested by admin',
+      duration_seconds: Number(process.env.BELL_DURATION_SECONDS || 15)
+    };
+  }
+
+  return null;
 };
 
 // Get device status (API helper)

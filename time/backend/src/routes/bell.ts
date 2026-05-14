@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { triggerManualBell, getDeviceStatus, updateDeviceHeartbeat, getCurrentSessionState } from '../schedulers/bellScheduler';
+import { triggerManualBell, getDeviceStatus, updateDeviceHeartbeat, getCurrentSessionState, consumeHardwareBellCommand } from '../schedulers/bellScheduler';
 import { authenticateToken, requireAdmin } from '../middleware/auth';
 import { sendSMSToTeachers } from '../services/smsService';
 
@@ -25,15 +25,12 @@ router.post('/ring-now', authenticateToken, requireAdmin, async (req, res) => {
 router.get('/ring-now', async (req, res) => {
   try {
     const result = await getCurrentSessionState();
-    // Check system state for manual ring flag
-    const { query: dbQuery } = await import('../config/database');
-    const { run } = await import('../config/database');
-    const flag = await dbQuery<{ value: string }[]>('SELECT value FROM system_state WHERE key = ?', ['manual_ring']);
-    const shouldRing = flag.length > 0 && flag[0].value === 'true';
-    if (shouldRing) {
-      await run(`UPDATE system_state SET value = 'false', updated_at = CURRENT_TIMESTAMP WHERE key = 'manual_ring'`);
-    }
-    res.json({ ring: shouldRing, currentSession: result });
+    const command = await consumeHardwareBellCommand();
+    res.json({
+      ring: !!command,
+      command,
+      currentSession: result
+    });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

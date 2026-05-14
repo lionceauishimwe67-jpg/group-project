@@ -15,7 +15,7 @@ const char* manualRingEndpoint = "/api/bell/ring-now";
 const char* heartbeatEndpoint = "/api/hardware/heartbeat";
 const char* deviceId = "mhbell-esp32";
 const unsigned long SCHEDULE_REFRESH_INTERVAL_MS = 12UL * 60UL * 60UL * 1000UL;
-const unsigned long MANUAL_RING_POLL_INTERVAL_MS = 3000;
+const unsigned long MANUAL_RING_POLL_INTERVAL_MS = 500;
 const unsigned long HEARTBEAT_INTERVAL_MS = 30000;
 unsigned long lastScheduleFetch = 0;
 unsigned long lastManualRingPoll = 0;
@@ -24,6 +24,8 @@ bool backendScheduleLoaded = false;
 String backendBellTimes[32];
 int backendBellCount = 0;
 String currentDateString = "";
+String lastCommandId = "";
+int pendingBellDurationSeconds = 15;
 
 const char* ntpServer = "pool.ntp.org";
 const long gmtOffset_sec = 2 * 3600;
@@ -202,7 +204,7 @@ void sendHeartbeat() {
   lastHeartbeat = millis();
 }
 
-bool pollManualRing() {
+bool pollHardwareRingCommand(String& reason) {
   if (WiFi.status() != WL_CONNECTED) {
     return false;
   }
@@ -228,7 +230,31 @@ bool pollManualRing() {
     return false;
   }
 
-  return doc["ring"] == true;
+  if (doc["ring"] != true) {
+    return false;
+  }
+
+  if (doc["command"].is<JsonObject>()) {
+    JsonObject command = doc["command"].as<JsonObject>();
+    const char* commandId = command["id"];
+    if (commandId && lastCommandId == String(commandId)) {
+      return false;
+    }
+    if (commandId) {
+      lastCommandId = String(commandId);
+    }
+
+    const char* commandReason = command["reason"];
+    reason = commandReason ? String(commandReason) : "Hardware Ring";
+    pendingBellDurationSeconds = command["duration_seconds"] | 15;
+    if (pendingBellDurationSeconds < 1) pendingBellDurationSeconds = 1;
+    if (pendingBellDurationSeconds > 60) pendingBellDurationSeconds = 60;
+    return true;
+  }
+
+  reason = "Manual Ring";
+  pendingBellDurationSeconds = 15;
+  return true;
 }
 
 void printBoth(String l1, String l2);
@@ -236,9 +262,10 @@ void printBoth(String l1, String l2);
 void ringBell(const String& text = "Scheduled Bell") {
   printBoth("*** BELL RING ***", text);
   digitalWrite(bellPin, LOW);  // Activate active-low relay
-  delay(15000);
+  delay((unsigned long)pendingBellDurationSeconds * 1000UL);
   digitalWrite(bellPin, HIGH); // Deactivate active-low relay
   lcd.clear();
+  pendingBellDurationSeconds = 15;
 }
 
 void printBoth(String l1, String l2 = "") {
@@ -687,8 +714,9 @@ void loop() {
 
   if (WiFi.status() == WL_CONNECTED && millis() - lastManualRingPoll > MANUAL_RING_POLL_INTERVAL_MS) {
     lastManualRingPoll = millis();
-    if (pollManualRing()) {
-      ringBell("Manual Ring");
+    String ringReason = "";
+    if (pollHardwareRingCommand(ringReason)) {
+      ringBell(ringReason);
     }
   }
 
