@@ -1,0 +1,155 @@
+{
+  "days": [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday"
+  ],
+  "classes": [
+    {
+      "id": 0,
+      "name": "V in Software development",
+      "level": "V ",
+      "students": 40
+    }
+  ],
+  "subjects": [
+    {
+      "name": "Integrate the workplace",
+      "teacher": "Unassigned",
+      "hours_per_week": 3,
+      "availability": "Full Day"
+    },
+    {
+      "name": "SWDFA501",
+      "teacher": "Unassigned",
+      "hours_per_week": 3,
+      "availability": "Full Day"
+    },
+    {
+      "name": "SWDMA501",
+      "teacher": "Unassigned",
+      "hours_per_week": 3,
+      "availability": "Full Day"
+    },
+    {
+      "name": "SWDML501",
+      "teacher": "Unassigned",
+      "hours_per_week": 3,
+      "availability": "Full Day"
+    },
+    {
+      "name": "SWDND501",
+      "teacher": "Unassigned",
+      "hours_per_week": 3,
+      "availability": "Full Day"
+    },
+    {
+      "name": "SWDOT501",
+      "teacher": "Unassigned",
+      "hours_per_week": 3,
+      "availability": "Full Day"
+    },
+    {
+      "name": "GENPP501",
+      "teacher": "Unassigned",
+      "hours_per_week": 3,
+      "availability": "Full Day"
+    },
+    {
+      "name": "GENQA501",
+      "teacher": "Unassigned",
+      "hours_per_week": 3,
+      "availability": "Full Day"
+    },
+    {
+      "name": "GENAP502",
+      "teacher": "Unassigned",
+      "hours_per_week": 3,
+      "availability": "Full Day"
+    },
+    {
+      "name": "GENDW502",
+      "teacher": "Unassigned",
+      "hours_per_week": 3,
+      "availability": "Full Day"
+    },
+    {
+      "name": "CCMPE502",
+      "teacher": "Unassigned",
+      "hours_per_week": 3,
+      "availability": "Full Day"
+    },
+    {
+      "name": "CCMKN502",
+      "teacher": "Unassigned",
+      "hours_per_week": 3,
+      "availability": "Full Day"
+    },
+    {
+      "name": "CCMIW502",
+      "teacher": "Unassigned",
+      "hours_per_week": 3,
+      "availability": "Full Day"
+    },
+    {
+      "name": "CCMFT502",
+      "teacher": "Unassigned",
+      "hours_per_week": 3,
+      "availability": "Full Day"
+    },
+    {
+      "name": "CCMEN502",
+      "teacher": "Unassigned",
+      "hours_per_week": 3,
+      "availability": "Full Day"
+    },
+    {
+      "name": "CCMCZP501",
+      "teacher": "Unassigned",
+      "hours_per_week": 3,
+      "availability": "Full Day"
+    },
+    {
+      "name": "CCMKK502",
+      "teacher": "Unassigned",
+      "hours_per_week": 3,
+      "availability": "Full Day"
+    },
+    {
+      "name": "CCMBO502",
+      "teacher": "Unassigned",
+      "hours_per_week": 3,
+      "availability": "Full Day"
+    },
+    {
+      "name": "SWDIA502",
+      "teacher": "Unassigned",
+      "hours_per_week": 3,
+      "availability": "Full Day"
+    }
+  ],
+  "rules": [
+    "A teacher cannot teach two classes at the same time",
+    "Subject hours must match weekly requirements",
+    "Avoid repeating the same subject more than 2 times in one day",
+    "Teachers must follow availability constraints",
+    "Every class must have a balanced schedule",
+    "Core subjects should be in morning slots",
+    "Break times must be respected"
+  ],
+  "time_slots": [
+    "08:00-09:00",
+    "09:00-10:00",
+    "10:00-10:30",
+    "10:30-11:30",
+    "11:30-12:30",
+    "12:30-13:30",
+    "13:30-14:30",
+    "14:30-15:30",
+    "15:30-16:00",
+    "16:00-17:00"
+  ],
+  "classId": 0
+}

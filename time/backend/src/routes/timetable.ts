@@ -3,6 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import {
   getCurrentSessions,
+  getAllClassesStatus,
   getTimetable,
   getTimetableEntry,
   createTimetableEntry,
@@ -33,6 +34,7 @@ const batchImportUpload = multer({
 });
 
 // Public routes (for display screen)
+router.get('/all-classes-status', getAllClassesStatus);
 router.get('/current-sessions', getCurrentSessions);
 router.get('/today', getTimetable);
 router.get('/week', getWeeklyTimetable);

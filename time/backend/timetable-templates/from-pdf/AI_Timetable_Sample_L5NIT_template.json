@@ -1,0 +1,56 @@
+{
+  "days": [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday"
+  ],
+  "classes": [
+    {
+      "id": 0,
+      "name": "Unknown",
+      "level": "Unknown",
+      "students": 40
+    }
+  ],
+  "subjects": [
+    {
+      "name": "NITML",
+      "teacher": "NDABAKURANYE Pierre",
+      "hours_per_week": 3,
+      "availability": "Full Day"
+    },
+    {
+      "name": "MATH",
+      "teacher": "MINANI Xavier",
+      "hours_per_week": 3,
+      "availability": "Full Day"
+    },
+    {
+      "name": "NITCC",
+      "teacher": "MUKAMUGEMa Viviane",
+      "hours_per_week": 3,
+      "availability": "Full Day"
+    },
+    {
+      "name": "CCMIW",
+      "teacher": "NSABIMANA Anastase",
+      "hours_per_week": 3,
+      "availability": "Full Day"
+    }
+  ],
+  "rules": [
+    "A teacher cannot teach two classes at the same time",
+    "Subject hours must match weekly requirements",
+    "Avoid repeating the same subject more than 2 times in one day",
+    "Teachers must follow availability constraints",
+    "Every class must have a balanced schedule",
+    "Core subjects should be in morning slots",
+    "Break times must be respected"
+  ],
+  "time_slots": [
+    "07:50-08:10"
+  ],
+  "classId": 0
+}

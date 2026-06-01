@@ -28,7 +28,6 @@ import phoneNumbersRoutes from './routes/phoneNumbers';
 import studentRoutes from './routes/students';
 import gradeRoutes from './routes/grades';
 import alumniRoutes from './routes/alumni';
-import schoolEventRoutes from './routes/schoolEvents';
 import uploadRoutes from './routes/uploads';
 import parentRoutes from './routes/parents';
 import smartTimetableRoutes from './routes/smartTimetable';
@@ -225,7 +224,6 @@ app.use('/api/phone-numbers', phoneNumbersRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/grades', gradeRoutes);
 app.use('/api/alumni', alumniRoutes);
-app.use('/api/school-events', schoolEventRoutes);
 app.use('/api/uploads', uploadRoutes);
 app.use('/api/parents', parentRoutes);
 app.use('/api/smart-timetable', smartTimetableRoutes);
@@ -250,7 +248,6 @@ app.get('/', (req, res) => {
       students: '/api/students',
       grades: '/api/grades',
       alumni: '/api/alumni',
-      schoolEvents: '/api/school-events',
       uploads: '/api/uploads',
       parents: '/api/parents',
       hardware: '/api/hardware',

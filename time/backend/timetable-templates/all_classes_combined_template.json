@@ -1,0 +1,197 @@
+{
+  "days": [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday"
+  ],
+  "classes": [
+    {
+      "id": 120,
+      "name": "L3FAD",
+      "level": "L3",
+      "students": 40
+    },
+    {
+      "id": 116,
+      "name": "L3NIT",
+      "level": "L3",
+      "students": 40
+    },
+    {
+      "id": 118,
+      "name": "L3SWD",
+      "level": "L3",
+      "students": 40
+    },
+    {
+      "id": 128,
+      "name": "L4FAD",
+      "level": "L4",
+      "students": 40
+    },
+    {
+      "id": 124,
+      "name": "L4NIT",
+      "level": "L4",
+      "students": 40
+    },
+    {
+      "id": 126,
+      "name": "L4SWD",
+      "level": "L4",
+      "students": 40
+    },
+    {
+      "id": 25,
+      "name": "L5CSA",
+      "level": "Unknown",
+      "students": 40
+    },
+    {
+      "id": 62,
+      "name": "L5FAD",
+      "level": "L5",
+      "students": 40
+    },
+    {
+      "id": 19,
+      "name": "L5NIT",
+      "level": "L5",
+      "students": 40
+    },
+    {
+      "id": 20,
+      "name": "L5SWD",
+      "level": "L5",
+      "students": 40
+    }
+  ],
+  "subjects": [
+    {
+      "name": "Mathematics",
+      "teacher": "MUVARA Jean Damascene",
+      "hours_per_week": 4,
+      "availability": "Morning"
+    },
+    {
+      "name": "English",
+      "teacher": "Alice Uwase",
+      "hours_per_week": 4,
+      "availability": "Full Day"
+    },
+    {
+      "name": "French",
+      "teacher": "Claudine Mukamana",
+      "hours_per_week": 3,
+      "availability": "Morning"
+    },
+    {
+      "name": "Physics",
+      "teacher": "IGIHOZO Bonnette",
+      "hours_per_week": 2,
+      "availability": "Morning"
+    },
+    {
+      "name": "Chemistry",
+      "teacher": "UWUMUKIZA Marie Louise",
+      "hours_per_week": 2,
+      "availability": "Morning"
+    },
+    {
+      "name": "Biology",
+      "teacher": "MUKAMUGEMa Viviane",
+      "hours_per_week": 2,
+      "availability": "Morning"
+    },
+    {
+      "name": "History",
+      "teacher": "MUSIGI Jean Paul",
+      "hours_per_week": 2,
+      "availability": "Afternoon"
+    },
+    {
+      "name": "Geography",
+      "teacher": "NDABAKURANYE Pierre Claver",
+      "hours_per_week": 2,
+      "availability": "Afternoon"
+    },
+    {
+      "name": "ICT",
+      "teacher": "Eric Niyonzima",
+      "hours_per_week": 2,
+      "availability": "Full Day"
+    },
+    {
+      "name": "Fashion Design",
+      "teacher": "USANASE Ange",
+      "hours_per_week": 5,
+      "availability": "Full Day"
+    },
+    {
+      "name": "Kinyarwanda",
+      "teacher": "MUTESI Liliane",
+      "hours_per_week": 2,
+      "availability": "Full Day"
+    },
+    {
+      "name": "Physical Education",
+      "teacher": "MUSAFIRI Anastase",
+      "hours_per_week": 2,
+      "availability": "Afternoon"
+    },
+    {
+      "name": "Religion",
+      "teacher": "Padri NSENGIYUMVA Ignace",
+      "hours_per_week": 1,
+      "availability": "Afternoon"
+    },
+    {
+      "name": "Entrepreneurship",
+      "teacher": "Pascal Habimana",
+      "hours_per_week": 2,
+      "availability": "Full Day"
+    },
+    {
+      "name": "Networking",
+      "teacher": "IRARORA Jean Damascene",
+      "hours_per_week": 4,
+      "availability": "Full Day"
+    },
+    {
+      "name": "Software Development",
+      "teacher": "USANASE Ange",
+      "hours_per_week": 5,
+      "availability": "Full Day"
+    },
+    {
+      "name": "Computer Science",
+      "teacher": "ERIC Niyonzima",
+      "hours_per_week": 5,
+      "availability": "Full Day"
+    }
+  ],
+  "rules": [
+    "A teacher cannot teach two classes at the same time",
+    "Subject hours must match weekly requirements",
+    "Avoid repeating the same subject more than 2 times in one day",
+    "Teachers must follow availability constraints",
+    "Every class must have a balanced schedule",
+    "Core subjects (Math, English, Physics) should be in morning slots",
+    "Practical subjects (Fashion Design, Software Dev, Networking) need double periods",
+    "Break times must be respected: 10:00-10:30 short break, 12:30-13:30 lunch"
+  ],
+  "time_slots": [
+    "08:00-09:00",
+    "09:00-10:00",
+    "10:00-10:30",
+    "10:30-11:30",
+    "11:30-12:30",
+    "12:30-13:30",
+    "13:30-14:30",
+    "14:30-15:30",
+    "15:30-16:00",
+    "16:00-17:00"
+  ]
+}

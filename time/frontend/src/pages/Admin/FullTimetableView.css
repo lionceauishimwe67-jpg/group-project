@@ -20,6 +20,35 @@
   color: #dc2626;
 }
 
+.ftv-school-grid-wrap {
+  margin-top: 16px;
+  padding: 16px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(15, 52, 96, 0.08);
+  overflow-x: auto;
+}
+
+.timetable-view-empty {
+  margin-bottom: 20px;
+  padding: 20px 24px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 10px;
+  color: #92400e;
+}
+
+.timetable-view-empty-hint {
+  margin-top: 8px;
+  font-size: 0.95rem;
+  color: #78350f;
+}
+
+.timetable-view-empty a {
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
 .timetable-view-header {
   display: flex;
   justify-content: space-between;
@@ -595,4 +624,87 @@
 .legend-item.current .legend-color {
   background: #fca5a5;
   border-color: #ef4444;
+}
+
+/* Print Styles */
+@media print {
+  @page {
+    size: landscape;
+    margin: 10mm;
+  }
+
+  .timetable-view-header h1 {
+    -webkit-text-fill-color: #1f2937;
+    font-size: 1.4rem;
+  }
+
+  .btn-print { display: none !important; }
+  .admin-sidebar, .admin-main > *:not(.full-timetable-view) { display: none; }
+
+  .full-timetable-view {
+    padding: 0 !important;
+    background: white !important;
+  }
+
+  .timetable-view-header {
+    box-shadow: none;
+    border: none;
+    padding: 0 0 12px 0;
+    margin-bottom: 12px;
+  }
+
+  .timetable-filters, .timetable-summary, .timetable-legend {
+    display: none !important;
+  }
+
+  .weekly-timetable, .daily-timetable {
+    box-shadow: none;
+    border: 1px solid #d1d5db;
+    page-break-inside: avoid;
+  }
+
+  .entry-card {
+    break-inside: avoid;
+    box-shadow: none !important;
+    border: 1px solid #000;
+    color: #000 !important;
+    background: #f3f4f6 !important;
+  }
+
+  .entry-card.lesson {
+    background: #e0e7ff !important;
+    border-color: #3b82f6;
+  }
+  .entry-card.break {
+    background: #fef3c7 !important;
+    border-color: #f59e0b;
+  }
+  .entry-card.free {
+    background: #dcfce7 !important;
+    border-color: #22c55e;
+  }
+  .entry-card.special {
+    background: #f3e8ff !important;
+    border-color: #a855f7;
+  }
+
+  .entry-subject { font-weight: 700; }
+  .class-header, .corner-cell { background: #1f2937 !important; color: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .time-column { background: #f9fafb !important; }
+  .time-slot { border-bottom: 1px solid #d1d5db; }
+  .schedule-cell { border-bottom: 1px solid #e5e7eb; }
+
+  .day-btn.active {
+    background: #1f2937 !important;
+    border-color: #000;
+    color: white !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .ftv-school-grid-wrap {
+    box-shadow: none;
+    border: 1px solid #d1d5db;
+    page-break-inside: avoid;
+  }
 }

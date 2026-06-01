@@ -2,10 +2,12 @@ import { Request, Response } from 'express';
 import { query, queryOne, run, withTransaction, getDb } from '../config/database';
 import { asyncHandler } from '../middleware/errorHandler';
 import { generateTimetableFromChronogram } from './aiTimetableGenerator';
+import { standardSlotsToChronogram, getSchedulableSlots, STANDARD_SCHOOL_SLOTS, enforceStandardTimeSlots } from '../config/schoolTimetableFormat';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import * as XLSX from 'xlsx';
+import { io } from '../server';
 
 // File parsers
 let pdfParse: any;
@@ -102,18 +104,8 @@ interface ParsedRow {
   [key: string]: string;
 }
 
-// Default time slots if none extracted
-const DEFAULT_TIME_SLOTS: TimeSlot[] = [
-  { label: 'Period 1', startTime: '08:10', endTime: '09:00', isBreak: false, isLunch: false },
-  { label: 'Period 2', startTime: '09:00', endTime: '09:50', isBreak: false, isLunch: false },
-  { label: 'Short Break', startTime: '09:50', endTime: '10:10', isBreak: true, isLunch: false },
-  { label: 'Period 3', startTime: '10:10', endTime: '10:55', isBreak: false, isLunch: false },
-  { label: 'Period 4', startTime: '10:55', endTime: '11:45', isBreak: false, isLunch: false },
-  { label: 'Period 5', startTime: '11:45', endTime: '12:35', isBreak: false, isLunch: false },
-  { label: 'Lunch Break', startTime: '12:35', endTime: '13:35', isBreak: false, isLunch: true },
-  { label: 'Period 6', startTime: '13:35', endTime: '14:25', isBreak: false, isLunch: false },
-  { label: 'Period 7', startTime: '14:25', endTime: '15:15', isBreak: false, isLunch: false },
-];
+// Default time slots — LYCEE-style school grid (assembly, breaks, lunch, 10 periods)
+const DEFAULT_TIME_SLOTS: TimeSlot[] = standardSlotsToChronogram();
 
 const DAY_MAP: Record<string, number> = {
   monday: 1, mon: 1,
@@ -281,8 +273,8 @@ function parseCell(cell: string): { subject: string; teacherId?: number } | null
   for (const s of special) if (t === s || t.startsWith(s + ' ')) return { subject: s };
 
   // Pattern: SUBJECT CODE (teacher_id) or SUBJECTCODE(teacher_id) or SUBJECTCODE()
-  // Handles: "GENCP (13)", "GENMGP(2)", "NITIS(25)", "NITIAP" (no teacher)
-  const m = cell.match(/^([A-Za-z][A-Za-z0-9\s&\-/]{1,35})\s*\(\s*(\d*)\s*\)$/);
+  // Handles: "GENCP (13)", "GENMGP(2)", "NITIS(25)", "NITIAP" (no teacher), "EN.SHIP (14)"
+  const m = cell.match(/^([A-Za-z][A-Za-z0-9\s&\-/.]{1,35})\s*\(\s*(\d*)\s*\)$/);
   if (m) {
     const tid = m[2] ? parseInt(m[2], 10) : NaN;
     return { subject: m[1].trim().toUpperCase(), teacherId: isNaN(tid) ? undefined : tid };
@@ -293,8 +285,8 @@ function parseCell(cell: string): { subject: string; teacherId?: number } | null
     return { subject: t };
   }
 
-  // Plain subject name
-  if (/^[A-Za-z][A-Za-z0-9\s&\-/]{1,35}$/.test(cell.trim())) return { subject: cell.trim().toUpperCase() };
+  // Plain subject name (allow dots for abbreviations like "EN.SHIP")
+  if (/^[A-Za-z][A-Za-z0-9\s&\-/.]{1,35}$/.test(cell.trim())) return { subject: cell.trim().toUpperCase() };
   return null;
 }
 
@@ -317,6 +309,144 @@ function parseTimeRange(value: string): TimeSlot | null {
     isBreak: lower.includes('break'),
     isLunch: lower.includes('lunch'),
   };
+}
+
+function addSubjectOccurrence(
+  subjectMap: Map<string, { name: string; periods: number; teacherId?: number; teacherName?: string; code?: string }>,
+  subjectName: string,
+  teacherName?: string,
+  periods = 1
+) {
+  const name = subjectName.trim();
+  if (!name || !isValidSubjectName(name)) return;
+  const key = name.toUpperCase();
+  const existing = subjectMap.get(key);
+  if (!existing) {
+    subjectMap.set(key, { name, periods, teacherName: teacherName?.trim() || undefined });
+    return;
+  }
+  existing.periods += periods;
+  if (!existing.teacherName && teacherName?.trim()) existing.teacherName = teacherName.trim();
+}
+
+function splitSubjectTeacherFromRow(tail: string): { subject: string; teacherName?: string } | null {
+  const cleaned = tail.replace(/\s+/g, ' ').trim();
+  if (!cleaned) return null;
+
+  const knownSubjects = [
+    'Computer Science', 'Physical Education', 'Entrepreneurship', 'Social Studies',
+    'General Studies', 'Religious Education', 'Fine Art', 'Home Science',
+    'Mathematics', 'English', 'Physics', 'Chemistry', 'Biology', 'History',
+    'Geography', 'French', 'Kiswahili', 'Economics', 'Accounting', 'ICT',
+    'Science', 'Literature', 'Kinyarwanda', 'Religion', 'Music', 'Sport'
+  ].sort((a, b) => b.length - a.length);
+
+  for (const subject of knownSubjects) {
+    const escapedSubject = subject.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const match = cleaned.match(new RegExp(`^${escapedSubject}(?:\\s+(.+))?$`, 'i'));
+    if (match) return { subject, teacherName: match[1]?.trim() };
+  }
+
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  if (words.length === 1) return { subject: words[0] };
+  if (words.length === 2) return { subject: words[0], teacherName: words[1] };
+
+  return {
+    subject: words.slice(0, -2).join(' '),
+    teacherName: words.slice(-2).join(' ')
+  };
+}
+
+function parseRowStyleTimetable(
+  lines: string[],
+  subjectMap: Map<string, { name: string; periods: number; teacherId?: number; teacherName?: string; code?: string }>,
+  timeSlots: TimeSlot[]
+): string {
+  let className = '';
+  const headerIdx = lines.findIndex(line => {
+    const normalized = line.toLowerCase().replace(/\s+/g, ' ').trim();
+    return normalized.includes('day') &&
+      normalized.includes('time') &&
+      normalized.includes('class') &&
+      normalized.includes('subject') &&
+      normalized.includes('teacher');
+  });
+
+  const sourceLines = headerIdx >= 0 ? lines.slice(headerIdx + 1) : lines;
+  for (const line of sourceLines) {
+    const match = line.match(/^(monday|mon|tuesday|tue|wednesday|wed|thursday|thu|friday|fri|saturday|sat|sunday|sun)\s+(\d{1,2}[:\.]\d{2}\s*[-â€“â€”~]\s*\d{1,2}[:\.]\d{2})\s+([A-Z0-9][A-Z0-9_\-/]*)\s+(.+)$/i);
+    if (!match) {
+      if (headerIdx >= 0 && /following the same format|suitable for|--\s*\d+\s+of\s+\d+/i.test(line)) break;
+      continue;
+    }
+
+    const slot = parseTimeRange(match[2]);
+    if (slot && !timeSlots.find(s => s.startTime === slot.startTime && s.endTime === slot.endTime)) {
+      timeSlots.push({ ...slot, label: `Period ${timeSlots.length + 1}` });
+    }
+
+    if (!className) className = match[3].trim();
+    const parsed = splitSubjectTeacherFromRow(match[4]);
+    if (parsed?.subject) {
+      addSubjectOccurrence(subjectMap, parsed.subject, parsed.teacherName);
+    }
+  }
+
+  return className;
+}
+
+function parseModuleChronogramSubjects(
+  text: string,
+  subjectMap: Map<string, { name: string; periods: number; teacherId?: number; teacherName?: string; code?: string }>
+) {
+  if (subjectMap.size > 0 || !/modules?\s+(?:hours|periods)/i.test(text)) return;
+
+  const moduleCodeRegionMatch = text.match(/([A-Z][A-Z0-9\s]{2,300}?)(?=\s*Modules?\s+hours)/i);
+  const moduleCodeRegion = moduleCodeRegionMatch?.[1] || text;
+  const moduleCodeRegionStart = moduleCodeRegionMatch?.index ?? 0;
+  const moduleCodeMatches = Array.from(moduleCodeRegion.matchAll(/[A-Z][A-Z ]{2,12}?\d{3}/g))
+    .map(match => ({
+      code: match[0].replace(/\s+/g, ''),
+      index: moduleCodeRegionStart + (match.index ?? -1)
+    }))
+    .filter(match => match.index >= 0 && /^[A-Z]{3,15}\d{3}$/.test(match.code));
+
+  const uniqueCodes: { code: string; index: number }[] = [];
+  const seenCodes = new Set<string>();
+  for (const match of moduleCodeMatches) {
+    if (seenCodes.has(match.code)) continue;
+    seenCodes.add(match.code);
+    uniqueCodes.push(match);
+  }
+  if (uniqueCodes.length === 0) return;
+
+  const firstCodeIndex = uniqueCodes[0].index;
+  const introText = text
+    .slice(0, firstCodeIndex)
+    .replace(/\bRepublic of Rwanda\b/gi, ' ')
+    .replace(/\bMinistry of Education\b/gi, ' ')
+    .replace(/\b(?:RQF\s+LEVEL|CORE\s+COMPETENCES?|SPECIFIC\s+GENERAL)\b.*$/is, '')
+    .replace(/\bIoT\b/g, 'IOT')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const moduleNames = introText
+    .replace(/([A-Z]{2,})(?=[A-Z][a-z])/g, '$1|')
+    .replace(/([a-zà-ÿ])(?=[A-Z])/g, '$1|')
+    .split('|')
+    .map(name => name.replace(/^[\s,.;:()/-]+/, '').replace(/\s+/g, ' ').trim())
+    .filter(name => name.length >= 3 && isValidSubjectName(name));
+
+  for (let i = 0; i < uniqueCodes.length; i++) {
+    const code = uniqueCodes[i].code;
+    const name = moduleNames[i] || code;
+    addSubjectOccurrence(subjectMap, name, undefined, 2);
+    const existing = subjectMap.get(name.toUpperCase());
+    if (existing) {
+      existing.name = name;
+      existing.code = code;
+    }
+  }
 }
 
 function parseMachineReadableTimetable(rawText: string): ChronogramData | null {
@@ -361,7 +491,7 @@ function parseMachineReadableTimetable(rawText: string): ChronogramData | null {
     const classInfo = payload.class || payload.targetClass || {};
     return {
       subjects,
-      timeSlots: timeSlots.length ? timeSlots : [...DEFAULT_TIME_SLOTS],
+      timeSlots: [...DEFAULT_TIME_SLOTS],
       days: Array.isArray(payload.days) && payload.days.length ? payload.days : DAY_ORDER,
       className: String(classInfo.name || payload.className || '').trim(),
       rawText: rawText.slice(0, 5000),
@@ -381,11 +511,14 @@ function parseChronogramFromText(rawText: string): ChronogramData {
 
   const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean).filter(l => !isLikelyMetadataLine(l));
 
-  const subjectMap = new Map<string, { name: string; periods: number; teacherId?: number; teacherName?: string }>();
+  const subjectMap = new Map<string, { name: string; periods: number; teacherId?: number; teacherName?: string; code?: string }>();
   const timeSlots: TimeSlot[] = [];
   let className = '';
   const dayOrder: string[] = ['Monday','Tuesday','Wednesday','Thursday','Friday'];
   const dayIndex = new Map(dayOrder.map((d,i) => [d.toLowerCase(), i]));
+
+  const rowStyleClassName = parseRowStyleTimetable(lines, subjectMap, timeSlots);
+  if (rowStyleClassName && !className) className = rowStyleClassName;
 
   // Detect grid header row (contains day names)
   let headerIdx = -1;
@@ -513,6 +646,8 @@ function parseChronogramFromText(rawText: string): ChronogramData {
     }
   }
 
+  parseModuleChronogramSubjects(text, subjectMap);
+
   // Fallback: if no grid detected, use basic line-by-line parsing for time slots
   if (timeSlots.length === 0) {
     for (const line of lines) {
@@ -543,11 +678,18 @@ function parseChronogramFromText(rawText: string): ChronogramData {
   if (seniorMatch && !className) {
     className = seniorMatch[1].trim();
   }
+  if (/training\s+chronogram/i.test(text)) {
+    const qualificationMatch = text.match(/QUALIFICATION(?:\s+TITLE)?[:\s]+([^\n]{3,120})/i);
+    const tradeMatch = text.match(/TRADE[:\s]+([^\n]{3,120})/i);
+    const extractedClassName = qualificationMatch?.[1]?.trim() || tradeMatch?.[1]?.trim();
+    if (extractedClassName) className = extractedClassName;
+  }
 
   const subjects: ChronogramSubject[] = [];
   for (const [, s] of subjectMap) {
     subjects.push({
       name: s.name,
+      code: s.code,
       periodsPerWeek: s.periods,
       teacherNumber: s.teacherId ? String(s.teacherId) : undefined,
       teacherName: s.teacherName,
@@ -556,7 +698,7 @@ function parseChronogramFromText(rawText: string): ChronogramData {
 
   return {
     subjects,
-    timeSlots: timeSlots.length ? timeSlots : [...DEFAULT_TIME_SLOTS],
+    timeSlots: [...DEFAULT_TIME_SLOTS],
     days: dayOrder,
     className,
     rawText: text.slice(0, 5000)
@@ -564,7 +706,7 @@ function parseChronogramFromText(rawText: string): ChronogramData {
 }
 
 function parseChronogramFromRows(rows: any[]): ChronogramData {
-  const subjectMap = new Map<string, { name: string; periods: number; teacherId?: number; teacherName?: string }>();
+  const subjectMap = new Map<string, { name: string; periods: number; teacherId?: number; teacherName?: string; code?: string }>();
   const timeSlots: TimeSlot[] = [];
   const days: string[] = [];
   let className = '';
@@ -655,7 +797,7 @@ function parseChronogramFromRows(rows: any[]): ChronogramData {
         teacherNumber: s.teacherId ? String(s.teacherId) : undefined,
       });
     }
-    return { subjects, timeSlots: timeSlots.length ? timeSlots : [...DEFAULT_TIME_SLOTS], days: DAY_ORDER, className };
+    return { subjects, timeSlots: [...DEFAULT_TIME_SLOTS], days: DAY_ORDER, className };
   }
 
   // Object-row format (CSV / XLSX with headers as object keys)
@@ -733,7 +875,7 @@ function parseChronogramFromRows(rows: any[]): ChronogramData {
     });
   }
 
-  return { subjects, timeSlots: timeSlots.length ? timeSlots : [...DEFAULT_TIME_SLOTS], days: days.length ? days : ['Monday','Tuesday','Wednesday','Thursday','Friday'], className };
+  return { subjects, timeSlots: [...DEFAULT_TIME_SLOTS], days: days.length ? days : ['Monday','Tuesday','Wednesday','Thursday','Friday'], className };
 }
 
 // Enhanced AI timetable generator with constraint satisfaction and backtracking
@@ -746,9 +888,10 @@ async function generateSmartTimetableAlgorithm(
   const warnings: string[] = [];
   const entries: TimetableEntryInput[] = [];
 
+  chronogram = enforceStandardTimeSlots(chronogram) as ChronogramData;
   const { subjects, timeSlots } = chronogram;
   const workingDays = [1, 2, 3, 4, 5]; // Mon-Fri
-  const nonBreakSlots = timeSlots.filter(s => !s.isBreak && !s.isLunch);
+  const nonBreakSlots = getSchedulableSlots(timeSlots);
 
   // Debug: Log chronogram structure
   console.log('DEBUG: Chronogram received:', {
@@ -779,6 +922,16 @@ async function generateSmartTimetableAlgorithm(
         return a.length > 3 && b.length > 3 && (a.includes(b) || b.includes(a));
       });
     }
+    if (!dbSubject) {
+      // Try matching by code patterns (e.g., NITIA402 matches NITIA501)
+      const codeMatch = s.name.match(/^([A-Z]{3,6})\d{3}$/);
+      if (codeMatch) {
+        const prefix = codeMatch[1];
+        dbSubject = referenceData.subjects.find((sub: any) =>
+          sub.code?.toUpperCase().startsWith(prefix) || sub.name?.toUpperCase().startsWith(prefix)
+        );
+      }
+    }
 
     // Find teacher by number or name
     let dbTeacher = null;
@@ -795,10 +948,16 @@ async function generateSmartTimetableAlgorithm(
       );
     }
     if (!dbTeacher && dbSubject) {
-      // Try teacher_subjects relationship
-      const rel = referenceData.teacherSubjects.find((ts: any) => ts.subject_id === dbSubject.id);
-      if (rel) {
-        dbTeacher = referenceData.teachers.find((t: any) => t.id === rel.teacher_id);
+      // Find all teachers who teach this subject and pick the least busy
+      const teacherSubjectRels = referenceData.teacherSubjects.filter((ts: any) => ts.subject_id === dbSubject.id);
+      if (teacherSubjectRels.length > 0) {
+        const teacherIds = teacherSubjectRels.map((ts: any) => ts.teacher_id);
+        const teacherWorkloads = teacherIds.map(teacherId => ({
+          teacherId,
+          workload: entries.filter((e: any) => e.teacher_id === teacherId).length
+        }));
+        teacherWorkloads.sort((a, b) => a.workload - b.workload);
+        dbTeacher = referenceData.teachers.find((t: any) => t.id === teacherWorkloads[0].teacherId);
       }
     }
 
@@ -1272,24 +1431,33 @@ export const generateSmartTimetable = asyncHandler(async (req: Request, res: Res
     return res.status(400).json({ success: false, error: 'Invalid chronogram data' });
   }
 
+  chronogram = enforceStandardTimeSlots(chronogram) as ChronogramData;
+
   // Ensure class exists
   const classRecord = await queryOne<{ id: number; name: string }>('SELECT id, name FROM classes WHERE id = ?', [classId]);
   if (!classRecord) {
     return res.status(404).json({ success: false, error: 'Class not found' });
   }
+  chronogram = { ...chronogram, className: classRecord.name };
 
   // Load reference data
-  const [teachers, subjects, classrooms, teacherSubjects] = await Promise.all([
+  const [teachers, subjects, classrooms, teacherSubjects, teacherClasses] = await Promise.all([
     query('SELECT id, name, phone FROM teachers ORDER BY name'),
     query('SELECT id, name, code FROM subjects ORDER BY name'),
     query('SELECT id, name FROM classrooms ORDER BY name'),
     query('SELECT teacher_id, subject_id FROM teacher_subjects'),
+    query('SELECT teacher_id, class_id FROM teacher_classes'),
   ]);
 
-  const referenceData = { teachers, subjects, classrooms, teacherSubjects } as { teachers: any[]; subjects: any[]; classrooms: any[]; teacherSubjects: any[] };
+  const referenceData = { teachers, subjects, classrooms, teacherSubjects, teacherClasses } as { teachers: any[]; subjects: any[]; classrooms: any[]; teacherSubjects: any[]; teacherClasses: any[] };
+
+  // Load existing timetable entries from ALL classes to prevent cross-class teacher conflicts
+  const existingEntries = await query<{ class_id: number; subject_id: number; teacher_id: number; classroom_id: number; day_of_week: number; start_time: string; end_time: string }[]>(
+    'SELECT class_id, subject_id, teacher_id, classroom_id, day_of_week, start_time, end_time FROM timetable'
+  );
 
   // Run generation using enhanced AI algorithm
-  const { entries, conflicts, warnings } = await generateTimetableFromChronogram(chronogram, classId, referenceData);
+  const { entries, conflicts, warnings } = await generateTimetableFromChronogram(chronogram, classId, referenceData, existingEntries);
 
   // Save generation record
   const genResult = await run(
@@ -1352,11 +1520,26 @@ export const saveGeneratedTimetable = asyncHandler(async (req: Request, res: Res
       await run('DELETE FROM timetable WHERE class_id = ? AND is_temporary = 0', [generation.class_id]);
     }
 
+    const normDbTime = (t: string) => {
+      const s = String(t || '').trim();
+      const parts = s.split(':');
+      if (parts.length < 2) return s.slice(0, 5);
+      return `${parts[0].padStart(2, '0')}:${(parts[1] || '0').padStart(2, '0')}`;
+    };
+
     for (const e of entries) {
       await run(
         `INSERT INTO timetable (class_id, subject_id, teacher_id, classroom_id, day_of_week, start_time, end_time, is_active)
          VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
-        [e.class_id, e.subject_id, e.teacher_id || null, e.classroom_id || null, e.day_of_week, e.start_time, e.end_time]
+        [
+          e.class_id,
+          e.subject_id,
+          e.teacher_id || null,
+          e.classroom_id || null,
+          Number(e.day_of_week),
+          normDbTime(e.start_time),
+          normDbTime(e.end_time),
+        ]
       );
     }
 
@@ -1375,6 +1558,8 @@ export const saveGeneratedTimetable = asyncHandler(async (req: Request, res: Res
     message: `Saved ${entries.length} timetable entries for class`,
     data: { savedCount: entries.length }
   });
+
+  io.emit('timetable-updated', { class_id: generation.class_id, savedCount: entries.length });
 });
 
 // Get real-world current time (use server time as reference, can be enhanced with NTP)
@@ -1537,6 +1722,72 @@ export const getCurrentActivity = asyncHandler(async (req: Request, res: Respons
   });
 });
 
+function normExportTime(t: string): string {
+  return String(t || '').slice(0, 5);
+}
+
+async function enrichEntriesForExport(entries: any[]): Promise<any[]> {
+  if (!entries.length || entries[0].subject_name) return entries;
+  const subjects = await query<any[]>('SELECT id, name FROM subjects');
+  const teachers = await query<any[]>('SELECT id, name FROM teachers');
+  const classrooms = await query<any[]>('SELECT id, name FROM classrooms');
+  const subMap = new Map(subjects.map((s) => [s.id, s.name]));
+  const teachMap = new Map(teachers.map((t) => [t.id, t.name]));
+  const roomMap = new Map(classrooms.map((c) => [c.id, c.name]));
+  return entries.map((e) => ({
+    ...e,
+    subject_name: subMap.get(e.subject_id) || e.subject_id,
+    teacher_name: teachMap.get(e.teacher_id) || '',
+    classroom_name: roomMap.get(e.classroom_id) || '',
+  }));
+}
+
+function findGridEntry(entries: any[], day: number, start: string, end: string) {
+  return entries.find(
+    (e) =>
+      e.day_of_week === day &&
+      normExportTime(e.start_time) === start &&
+      normExportTime(e.end_time) === end
+  );
+}
+
+function gridCellText(slot: (typeof STANDARD_SCHOOL_SLOTS)[0], day: number, entry: any): string {
+  if (slot.isAssembly) return 'ASSEMBLY';
+  if (slot.isBreak) return 'BREAK';
+  if (slot.isLunch) return 'LUNCH';
+  const fixed = slot.fixedByDay?.[day as 1 | 2 | 3 | 4 | 5];
+  if (fixed) return fixed;
+  if (!entry) return '';
+  const subj = entry.subject_name || String(entry.subject_id || '');
+  const teach = entry.teacher_name || (entry.teacher_id ? String(entry.teacher_id) : '');
+  return teach ? `${subj}\n${teach}` : subj;
+}
+
+/** LYCEE-style weekly grid for Excel/PDF export */
+function buildSchoolGridAoa(entries: any[], className: string): unknown[][] {
+  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+  const aoa: unknown[][] = [
+    ['LYCEE SAINT ALEXANDRE SAULI DE MUHURA.', '2024-2025', 'SCHOOL TIMETABLE'],
+    ["TRAINER'S NAMES: .......", className ? `Class: ${className}` : '', 'TERM I'],
+    [],
+    ['Time / period', ...days],
+  ];
+  for (const slot of STANDARD_SCHOOL_SLOTS) {
+    const timeCol = `${slot.startTime} - ${slot.endTime}`;
+    if (slot.isAssembly || slot.isBreak || slot.isLunch) {
+      const label = slot.isAssembly ? 'ASSEMBLY' : slot.isBreak ? 'BREAK' : 'LUNCH';
+      aoa.push([timeCol, label, '', '', '', '']);
+      continue;
+    }
+    const row: unknown[] = [timeCol];
+    for (let d = 1; d <= 5; d++) {
+      row.push(gridCellText(slot, d, findGridEntry(entries, d, slot.startTime, slot.endTime)));
+    }
+    aoa.push(row);
+  }
+  return aoa;
+}
+
 // Export timetable to Excel, CSV, or PDF
 export const exportTimetable = asyncHandler(async (req: Request, res: Response) => {
   const { generationId, classId, format = 'excel' } = req.body;
@@ -1576,6 +1827,8 @@ export const exportTimetable = asyncHandler(async (req: Request, res: Response) 
     className = cls?.name || '';
   }
 
+  entries = await enrichEntriesForExport(entries);
+
   const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   const rows = entries.map((e: any) => ({
     Day: dayNames[e.day_of_week] || e.day_of_week,
@@ -1597,8 +1850,12 @@ export const exportTimetable = asyncHandler(async (req: Request, res: Response) 
 
   if (format === 'excel') {
     const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(rows);
-    XLSX.utils.book_append_sheet(wb, ws, 'Timetable');
+    const wsGrid = XLSX.utils.aoa_to_sheet(buildSchoolGridAoa(entries, className));
+    XLSX.utils.book_append_sheet(wb, wsGrid, 'School Timetable');
+    if (rows.length > 0) {
+      const wsList = XLSX.utils.json_to_sheet(rows);
+      XLSX.utils.book_append_sheet(wb, wsList, 'Lesson List');
+    }
     const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="timetable-${className}.xlsx"`);
@@ -1619,15 +1876,20 @@ export const exportTimetable = asyncHandler(async (req: Request, res: Response) 
       }
     };
     const printer = new PdfPrinter(fonts);
-    const tableBody = [
-      ['Day', 'Start', 'End', 'Subject', 'Teacher', 'Classroom'],
-      ...rows.map((r: any) => [r.Day, r['Start Time'], r['End Time'], r.Subject, r.Teacher, r.Classroom])
-    ];
+    const gridAoa = buildSchoolGridAoa(entries, className);
     const docDef = {
       content: [
         { text: `School Timetable - ${className}`, style: 'header' },
         { text: `Generated: ${new Date().toLocaleString()}`, margin: [0, 0, 0, 10] },
-        { table: { body: tableBody }, layout: 'lightHorizontalLines' }
+        {
+          table: {
+            body: gridAoa.map((row) =>
+              (row as unknown[]).map((cell) => ({ text: String(cell ?? ''), fontSize: 7 }))
+            ),
+            widths: ['auto', '*', '*', '*', '*', '*'],
+          },
+          layout: 'lightHorizontalLines',
+        },
       ],
       styles: { header: { fontSize: 18, bold: true, margin: [0, 0, 0, 10] } }
     };

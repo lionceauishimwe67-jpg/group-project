@@ -5,6 +5,10 @@ import { query } from '../config/database';
 import { asyncHandler } from '../middleware/errorHandler';
 import { User } from '../types';
 
+function getJwtExpiresIn(): string {
+  return process.env.JWT_EXPIRES_IN || (process.env.NODE_ENV === 'production' ? '2h' : '24h');
+}
+
 // Login user
 export const login = asyncHandler(async (req: Request, res: Response) => {
   const { username, password } = req.body;
@@ -44,7 +48,6 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
   // Update last login
   await query("UPDATE users SET last_login = datetime('now') WHERE id = ?", [user.id]);
 
-  // Generate JWT with 2 hour expiration for better security
   const secret = process.env.JWT_SECRET || 'default-secret';
   const token = jwt.sign(
     {
@@ -53,7 +56,7 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
       role: user.role
     },
     secret,
-    { expiresIn: '2h' }
+    { expiresIn: getJwtExpiresIn() }
   );
 
   return res.json({
@@ -322,7 +325,7 @@ export const registerTeacher = asyncHandler(async (req: Request, res: Response) 
         teacherId: teacherId
       },
       secret,
-      { expiresIn: '24h' }
+      { expiresIn: getJwtExpiresIn() }
     );
 
     return res.status(201).json({

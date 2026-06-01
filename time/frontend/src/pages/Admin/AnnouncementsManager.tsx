@@ -1,6 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { announcementApi } from '../../services/api';
 import { Announcement } from '../../types';
+import {
+  ANNOUNCEMENT_FILE_ACCEPT,
+  fileKindFromFile,
+  fileKindFromAnnouncement,
+  hasAnnouncementAttachment,
+  type AnnouncementFileKind,
+} from '../../utils/announcementFiles';
 import axios from 'axios';
 
 interface AvailableImage {
@@ -39,6 +46,8 @@ const AnnouncementsManager: React.FC = () => {
   const [isDeliveryModalOpen, setIsDeliveryModalOpen] = useState(false);
   const [editingAnnouncement, setEditingAnnouncement] = useState<Announcement | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [previewFileName, setPreviewFileName] = useState<string | null>(null);
+  const [previewFileKind, setPreviewFileKind] = useState<AnnouncementFileKind>('none');
   const [availableImages, setAvailableImages] = useState<AvailableImage[]>([]);
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
   const [deliveryStatus, setDeliveryStatus] = useState<DeliveryStatus[]>([]);
@@ -119,7 +128,12 @@ const AnnouncementsManager: React.FC = () => {
       const response = await announcementApi.getAllAdmin();
       setAnnouncements(response.data.data || []);
     } catch (err: any) {
-      setError(err.message || 'Failed to load announcements');
+      const status = err.response?.status;
+      if (status === 401 || status === 403) {
+        setError('Session expired or not admin. Log in again at /admin/login');
+      } else {
+        setError(err.response?.data?.error || err.message || 'Failed to load announcements');
+      }
     } finally {
       setLoading(false);
     }
@@ -135,6 +149,8 @@ const AnnouncementsManager: React.FC = () => {
       expires_at: '',
     });
     setPreviewImage(null);
+    setPreviewFileName(null);
+    setPreviewFileKind('none');
     setSelectedImageUrl(null);
     setIsModalOpen(true);
   };
@@ -188,26 +204,38 @@ const AnnouncementsManager: React.FC = () => {
       expires_at: formattedExpiresAt,
     });
     setPreviewImage(announcement.image_url);
+    setPreviewFileName(announcement.image_path?.split('/').pop() || announcement.title);
+    setPreviewFileKind(fileKindFromAnnouncement(announcement));
     setIsModalOpen(true);
   };
 
-  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] || null;
-    if (file) {
+  const applySelectedFile = async (file: File) => {
+    const kind = fileKindFromFile(file);
+    setPreviewFileName(file.name);
+    setPreviewFileKind(kind);
+
+    if (kind === 'image') {
       try {
-        // Compress image
         const compressedFile = await compressImage(file);
         setFormData({ ...formData, image: compressedFile });
         setPreviewImage(URL.createObjectURL(compressedFile));
       } catch (err) {
         console.error('Compression failed:', err);
-        // Fallback to original file
         setFormData({ ...formData, image: file });
-        const reader = new FileReader();
-        reader.onloadend = () => setPreviewImage(reader.result as string);
-        reader.readAsDataURL(file);
+        setPreviewImage(URL.createObjectURL(file));
       }
+    } else if (kind === 'pdf') {
+      setFormData({ ...formData, image: file });
+      setPreviewImage(URL.createObjectURL(file));
+    } else {
+      setFormData({ ...formData, image: file });
+      setPreviewImage(null);
     }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    if (file) await applySelectedFile(file);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -225,19 +253,15 @@ const AnnouncementsManager: React.FC = () => {
     setIsDragging(false);
     
     const file = e.dataTransfer.files?.[0];
-    if (file && file.type.startsWith('image/')) {
-      try {
-        const compressedFile = await compressImage(file);
-        setFormData({ ...formData, image: compressedFile });
-        setPreviewImage(URL.createObjectURL(compressedFile));
-      } catch (err) {
-        console.error('Compression failed:', err);
-        setFormData({ ...formData, image: file });
-        const reader = new FileReader();
-        reader.onloadend = () => setPreviewImage(reader.result as string);
-        reader.readAsDataURL(file);
-      }
-    }
+    if (file) await applySelectedFile(file);
+  };
+
+  const clearAttachment = () => {
+    setFormData({ ...formData, image: null });
+    setPreviewImage(null);
+    setPreviewFileName(null);
+    setPreviewFileKind('none');
+    setSelectedImageUrl(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -257,7 +281,7 @@ const AnnouncementsManager: React.FC = () => {
       } else {
         // Allow announcements with just text, just image, or both
         if (!formData.image && !selectedImageUrl && !formData.text_content) {
-          alert('Please add either text content or an image');
+          alert('Shyiramo inyandiko, ifoto, PDF, cyangwa indi dosiye');
           return;
         }
         await announcementApi.create(data);
@@ -345,7 +369,7 @@ const AnnouncementsManager: React.FC = () => {
         <h1 className="page-title">Manage Announcements</h1>
         <div className="header-actions">
           <button onClick={openAddModal} className="btn btn-primary">
-            <span>➕</span> Upload Image
+            <span>➕</span> Upload Announcement
           </button>
         </div>
       </div>
@@ -370,17 +394,34 @@ const AnnouncementsManager: React.FC = () => {
               }}
             >
               <div style={{ height: '180px', overflow: 'hidden', background: '#f3f4f6' }}>
-                <img
-                  src={announcement.image_url}
-                  alt={announcement.title}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
-                    e.currentTarget.style.display = 'none';
-                    if (e.currentTarget.parentElement) {
-                      e.currentTarget.parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#9ca3af;font-size:3rem;">📷</div>';
-                    }
-                  }}
-                />
+                {fileKindFromAnnouncement(announcement) === 'pdf' && announcement.image_url ? (
+                  <iframe
+                    title={announcement.title}
+                    src={announcement.image_url}
+                    style={{ width: '100%', height: '100%', border: 'none' }}
+                  />
+                ) : fileKindFromAnnouncement(announcement) === 'image' && announcement.image_url ? (
+                  <img
+                    src={announcement.image_url}
+                    alt={announcement.title}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
+                      e.currentTarget.style.display = 'none';
+                      if (e.currentTarget.parentElement) {
+                        e.currentTarget.parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#9ca3af;font-size:3rem;">📷</div>';
+                      }
+                    }}
+                  />
+                ) : hasAnnouncementAttachment(announcement) ? (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', flexDirection: 'column', gap: 8, color: '#475569' }}>
+                    <span style={{ fontSize: '2.5rem' }}>📄</span>
+                    <span style={{ fontSize: '0.85rem', padding: '0 12px', textAlign: 'center' }}>
+                      {(announcement.image_path || '').split('/').pop() || 'Document'}
+                    </span>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#9ca3af', fontSize: '2rem' }}>📝</div>
+                )}
               </div>
               <div style={{ padding: '16px' }}>
                 <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '8px' }}>
@@ -440,7 +481,7 @@ const AnnouncementsManager: React.FC = () => {
 
         {announcements.length === 0 && (
           <div style={{ textAlign: 'center', padding: 40, color: '#9ca3af' }}>
-            No announcements. Click "Upload Image" to create one.
+            No announcements. Click &quot;Upload Announcement&quot; to add PDF, image, or document.
           </div>
         )}
       </div>
@@ -484,7 +525,7 @@ const AnnouncementsManager: React.FC = () => {
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Image (Optional)</label>
+                  <label className="form-label">Dosiye (PDF, ifoto, Word, Excel…) — Optional</label>
                   <div
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
@@ -502,40 +543,45 @@ const AnnouncementsManager: React.FC = () => {
                     <input
                       type="file"
                       className="form-control"
-                      accept="image/*"
-                      onChange={handleImageChange}
+                      accept={ANNOUNCEMENT_FILE_ACCEPT}
+                      onChange={handleFileChange}
                       style={{ display: 'none' }}
-                      id="image-upload"
+                      id="announcement-file-upload"
                     />
-                    {!previewImage ? (
-                      <label htmlFor="image-upload" style={{ cursor: 'pointer', display: 'block' }}>
-                        <div style={{ fontSize: '3rem', marginBottom: '8px' }}>📷</div>
+                    {previewFileKind === 'none' && !previewImage && !formData.image ? (
+                      <label htmlFor="announcement-file-upload" style={{ cursor: 'pointer', display: 'block' }}>
+                        <div style={{ fontSize: '3rem', marginBottom: '8px' }}>📎</div>
                         <div style={{ color: '#6b7280', fontSize: '0.9rem' }}>
-                          Click to upload or drag and drop
+                          Kanda cyangwa kurura dosiye hano
                         </div>
                         <div style={{ color: '#9ca3af', fontSize: '0.8rem', marginTop: '4px' }}>
-                          PNG, JPG, GIF, WEBP up to 1GB
+                          PDF, PNG, JPG, DOC, DOCX, TXT, XLS, PPT…
                         </div>
                       </label>
                     ) : (
                       <div style={{ position: 'relative' }}>
-                        <img 
-                          src={previewImage} 
-                          alt="Preview" 
-                          style={{ width: '100%', maxHeight: '200px', objectFit: 'cover', borderRadius: '6px' }}
-                          onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
-                            e.currentTarget.style.display = 'none';
-                            if (e.currentTarget.parentElement) {
-                              e.currentTarget.parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:200px;color:#9ca3af;font-size:2rem;">📷</div>';
-                            }
-                          }}
-                        />
+                        {previewFileKind === 'pdf' && (previewImage || editingAnnouncement?.image_url) ? (
+                          <iframe
+                            title="PDF preview"
+                            src={previewImage || editingAnnouncement?.image_url || ''}
+                            style={{ width: '100%', height: '220px', border: 'none', borderRadius: '6px' }}
+                          />
+                        ) : previewFileKind === 'image' && previewImage ? (
+                          <img
+                            src={previewImage}
+                            alt="Preview"
+                            style={{ width: '100%', maxHeight: '200px', objectFit: 'cover', borderRadius: '6px' }}
+                          />
+                        ) : (
+                          <div style={{ padding: '24px', background: '#fff', borderRadius: '6px' }}>
+                            <div style={{ fontSize: '2.5rem' }}>📄</div>
+                            <div style={{ marginTop: '8px', fontWeight: 600 }}>{previewFileName}</div>
+                            <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>Dosiye izashyirwa mu matangazo</div>
+                          </div>
+                        )}
                         <button
                           type="button"
-                          onClick={() => {
-                            setFormData({ ...formData, image: null });
-                            setPreviewImage(null);
-                          }}
+                          onClick={clearAttachment}
                           style={{
                             position: 'absolute',
                             top: '8px',
@@ -552,7 +598,7 @@ const AnnouncementsManager: React.FC = () => {
                             alignItems: 'center',
                             justifyContent: 'center',
                           }}
-                          title="Remove image"
+                          title="Remove file"
                         >
                           ×
                         </button>

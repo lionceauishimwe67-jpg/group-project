@@ -7,7 +7,7 @@ import { Announcement } from '../types';
 import { io } from '../server';
 import { sendSMSToTeachers } from '../services/smsService';
 
-const guessImageMimeType = (filename: string): string => {
+const guessAttachmentMimeType = (filename: string): string => {
   const ext = path.extname(filename).toLowerCase();
   const mimeTypes: Record<string, string> = {
     '.jpg': 'image/jpeg',
@@ -23,9 +23,20 @@ const guessImageMimeType = (filename: string): string => {
     '.avif': 'image/avif',
     '.heic': 'image/heic',
     '.heif': 'image/heif',
+    '.pdf': 'application/pdf',
+    '.doc': 'application/msword',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.txt': 'text/plain',
+    '.rtf': 'application/rtf',
+    '.xls': 'application/vnd.ms-excel',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.ppt': 'application/vnd.ms-powerpoint',
+    '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   };
   return mimeTypes[ext] || 'application/octet-stream';
 };
+
+const guessImageMimeType = guessAttachmentMimeType;
 
 // Get active announcements (for display screen)
 export const getAnnouncements = asyncHandler(async (req: Request, res: Response) => {
@@ -50,7 +61,7 @@ export const getAnnouncements = asyncHandler(async (req: Request, res: Response)
     FROM announcements
     WHERE is_active = 1
       AND (expires_at IS NULL OR datetime(expires_at) >= datetime('now'))
-      AND (image_data IS NULL OR image_path IS NULL OR is_approved_for_display = 1)
+      AND (image_data IS NULL OR image_path IS NULL OR is_approved_for_display = 1 OR is_approved_for_display IS NULL)
     ORDER BY display_order ASC, created_at DESC
   `);
 
@@ -191,7 +202,7 @@ export const createAnnouncement = asyncHandler(async (req: Request, res: Respons
   if (req.file) {
     try {
       imageData = req.file.buffer;
-      imageMimeType = guessImageMimeType(req.file.originalname);
+      imageMimeType = guessAttachmentMimeType(req.file.originalname);
       
       // Keep image_path for reference but store actual data in database
       const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
@@ -218,7 +229,7 @@ export const createAnnouncement = asyncHandler(async (req: Request, res: Respons
       
       // Determine MIME type
       const ext = path.extname(local_path).toLowerCase();
-      imageMimeType = guessImageMimeType(local_path);
+      imageMimeType = guessAttachmentMimeType(local_path);
       
       const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
       const destFileName = `announcement-${uniqueSuffix}${ext}`;
@@ -350,7 +361,7 @@ export const updateAnnouncement = asyncHandler(async (req: Request, res: Respons
       
       // Determine MIME type
       const ext = path.extname(req.file.originalname).toLowerCase();
-      const imageMimeType = guessImageMimeType(req.file.originalname);
+      const imageMimeType = guessAttachmentMimeType(req.file.originalname);
       
       const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
       const newImagePath = `uploads/announcements/announcement-${uniqueSuffix}${ext}`;
@@ -382,7 +393,7 @@ export const updateAnnouncement = asyncHandler(async (req: Request, res: Respons
       
       // Determine MIME type
       const ext = path.extname(local_path).toLowerCase();
-      const imageMimeType = guessImageMimeType(local_path);
+      const imageMimeType = guessAttachmentMimeType(local_path);
       
       const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
       const destFileName = `announcement-${uniqueSuffix}${ext}`;

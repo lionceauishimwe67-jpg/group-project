@@ -5,6 +5,106 @@ import { TimetableEntry, TimetableEntryWithDetails, CurrentSession } from '../ty
 import * as XLSX from 'xlsx';
 import { sendSMSToTeachers } from '../services/smsService';
 
+const PERIODS = [
+  { label: 'Assembly', start: '07:50', end: '08:10', type: 'assembly' },
+  { label: 'Period 1', start: '08:10', end: '08:50', type: 'lesson' },
+  { label: 'Period 2', start: '08:50', end: '09:30', type: 'lesson' },
+  { label: 'Period 3', start: '09:30', end: '10:10', type: 'lesson' },
+  { label: 'Morning Break', start: '10:10', end: '10:25', type: 'break' },
+  { label: 'Period 4', start: '10:25', end: '11:05', type: 'lesson' },
+  { label: 'Period 5', start: '11:05', end: '11:55', type: 'lesson' },
+  { label: 'Period 6', start: '11:55', end: '12:25', type: 'lesson' },
+  { label: 'Lunch', start: '12:25', end: '13:30', type: 'lunch' },
+  { label: 'Period 7', start: '13:30', end: '14:10', type: 'lesson' },
+  { label: 'Period 8', start: '14:10', end: '14:50', type: 'lesson' },
+  { label: 'Period 9', start: '14:50', end: '15:30', type: 'lesson' },
+  { label: 'Afternoon Break', start: '15:30', end: '15:40', type: 'break' },
+  { label: 'Period 10', start: '15:40', end: '16:20', type: 'lesson' },
+  { label: 'Afternoon', start: '16:20', end: '17:00', type: 'lesson' },
+  { label: 'Étude / Study Hall', start: '18:30', end: '20:25', type: 'etude' },
+];
+
+function getCurrentPeriod(currentTime: string): { label: string; type: string; start: string; end: string } | null {
+  for (const p of PERIODS) {
+    if (currentTime >= p.start && currentTime < p.end) return p;
+  }
+  return null;
+}
+
+function getNextPeriod(currentTime: string): { label: string; type: string; start: string; end: string } | null {
+  for (const p of PERIODS) {
+    if (currentTime < p.start) return p;
+  }
+  return null;
+}
+
+// Get all classes with current session status (for display grid)
+export const getAllClassesStatus = asyncHandler(async (req: Request, res: Response) => {
+  const now = new Date();
+  const currentTime = now.toTimeString().slice(0, 8);
+  const currentDay = now.getDay();
+  const currentDate = now.toISOString().split('T')[0];
+
+  const currentPeriod = getCurrentPeriod(currentTime);
+  const nextPeriod = getNextPeriod(currentTime);
+
+  // Get all classes
+  const classes = await query<any[]>(`SELECT id, name, level FROM classes ORDER BY level, name`);
+
+  // Get active sessions for today
+  const activeSessions = await query<any[]>(`
+    SELECT 
+      t.id, t.class_id, t.subject_id, t.teacher_id, t.classroom_id,
+      s.name AS subject_name, te.name AS teacher_name, cl.name AS classroom_name,
+      substr(t.start_time, 1, 5) AS start_time, substr(t.end_time, 1, 5) AS end_time
+    FROM timetable t
+    JOIN subjects s ON t.subject_id = s.id
+    JOIN teachers te ON t.teacher_id = te.id
+    JOIN classrooms cl ON t.classroom_id = cl.id
+    WHERE t.is_active = 1 AND t.day_of_week = ? AND t.is_temporary = 0
+      AND t.start_time <= ? AND t.end_time >= ?
+  `, [currentDay, currentTime, currentTime]);
+
+  // Map sessions by class_id
+  const sessionsByClass = new Map<number, any>();
+  for (const session of activeSessions) {
+    sessionsByClass.set(session.class_id, session);
+  }
+
+  // Determine if we're in a non-lesson period
+  const isBreakOrLunch = currentPeriod && (currentPeriod.type === 'break' || currentPeriod.type === 'lunch' || currentPeriod.type === 'assembly' || currentPeriod.type === 'etude');
+
+  // Build result with all classes
+  const result = classes.map(cls => {
+    const session = sessionsByClass.get(cls.id);
+    return {
+      class_id: cls.id,
+      class_name: cls.name,
+      level: cls.level,
+      is_active: !!session,
+      subject_name: session?.subject_name || null,
+      teacher_name: session?.teacher_name || null,
+      classroom_name: session?.classroom_name || null,
+      start_time: session?.start_time || null,
+      end_time: session?.end_time || null,
+    };
+  });
+
+  return res.json({
+    success: true,
+    data: result,
+    meta: {
+      current_time: currentTime,
+      current_day: currentDay,
+      total_classes: classes.length,
+      active_classes: activeSessions.length,
+      current_period: currentPeriod,
+      next_period: nextPeriod,
+      is_break_or_lunch: isBreakOrLunch,
+    }
+  });
+});
+
 // Get current sessions (for display screen)
 export const getCurrentSessions = asyncHandler(async (req: Request, res: Response) => {
   const { classId, level } = req.query;

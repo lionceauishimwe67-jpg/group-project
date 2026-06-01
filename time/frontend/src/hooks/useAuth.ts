@@ -8,6 +8,7 @@ interface UseAuthReturn {
   isLoading: boolean;
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, password: string) => Promise<void>;
+  setSession: (token: string, user: User) => void;
   logout: () => void;
   error: string | null;
 }
@@ -25,11 +26,10 @@ export function useAuth(): UseAuthReturn {
 
       if (token && storedUser) {
         try {
-          // Verify token with backend
-          await authApi.verify();
-          setUser(JSON.parse(storedUser));
-        } catch (err) {
-          // Token invalid, clear storage
+          const response = await authApi.verify();
+          const verified = response.data?.data?.user;
+          setUser(verified ? { ...JSON.parse(storedUser), ...verified } : JSON.parse(storedUser));
+        } catch {
           localStorage.removeItem('token');
           localStorage.removeItem('user');
         }
@@ -83,6 +83,12 @@ export function useAuth(): UseAuthReturn {
     }
   }, []);
 
+  const setSession = useCallback((token: string, sessionUser: User) => {
+    localStorage.setItem('token', token);
+    localStorage.setItem('user', JSON.stringify(sessionUser));
+    setUser(sessionUser);
+  }, []);
+
   const logout = useCallback(() => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
@@ -95,6 +101,7 @@ export function useAuth(): UseAuthReturn {
     isLoading,
     login,
     register,
+    setSession,
     logout,
     error,
   };

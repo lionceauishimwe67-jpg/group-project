@@ -63,6 +63,14 @@ const Dashboard: React.FC = () => {
       isBell: false,
     },
     {
+      icon: '🤖',
+      title: 'AI Smart Timetable',
+      description: 'Generate timetable from chronogram with AI',
+      path: '/admin/smart-timetable',
+      color: '#0f3460',
+      isBell: false,
+    },
+    {
       icon: '📢',
       title: 'Announcements',
       description: 'Upload and manage display content',

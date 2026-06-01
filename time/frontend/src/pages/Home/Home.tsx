@@ -1,27 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
-import { schoolEventApi } from '../../services/api';
 import './Home.css';
 
 const Home: React.FC = () => {
-  const [upcomingEvents, setUpcomingEvents] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    loadUpcomingEvents();
-  }, []);
-
-  const loadUpcomingEvents = async () => {
-    try {
-      const res = await schoolEventApi.getUpcoming();
-      setUpcomingEvents(res.data.events?.slice(0, 3) || []);
-    } catch (err) {
-      console.error('Failed to load events:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="home-page">
       <header className="home-header">
@@ -107,31 +88,6 @@ const Home: React.FC = () => {
             <p>Keep track of graduated students and maintain alumni connections.</p>
           </div>
         </div>
-      </section>
-
-      <section className="events-section">
-        <h2>Upcoming Events</h2>
-        {loading ? (
-          <div className="loading-events">Loading events...</div>
-        ) : upcomingEvents.length > 0 ? (
-          <div className="events-preview">
-            {upcomingEvents.map((e: any) => (
-              <div key={e.id} className="event-preview-card">
-                <div className="event-preview-date">
-                  <div className="preview-month">{new Date(e.start_date).toLocaleString('default', { month: 'short' })}</div>
-                  <div className="preview-day">{new Date(e.start_date).getDate()}</div>
-                </div>
-                <div className="event-preview-info">
-                  <h4>{e.title}</h4>
-                  <p>{e.description?.substring(0, 80) || 'School event'}...</p>
-                  <span className="event-preview-type">{e.event_type}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="no-events">No upcoming events at this time.</p>
-        )}
       </section>
 
       <footer className="home-footer">

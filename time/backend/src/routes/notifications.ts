@@ -5,9 +5,11 @@ import {
   getNotificationHistory,
   sendTestNotification,
   getNotificationPreferences,
-  sendClassArrival
+  sendClassArrival,
+  markNotificationAsRead,
+  getAllTeachersNotificationStatus
 } from '../controllers/notificationController';
-import { authenticateToken } from '../middleware/auth';
+import { authenticateToken, requireAdmin } from '../middleware/auth';
 
 const router = Router();
 
@@ -28,5 +30,11 @@ router.post('/test', authenticateToken, sendTestNotification);
 
 // Send class arrival notification (for when students arrive)
 router.post('/class-arrival', authenticateToken, sendClassArrival);
+
+// Mark a notification as read (teacher or admin)
+router.post('/:id/read', markNotificationAsRead);
+
+// Get all teachers notification status with read tracking (admin only)
+router.get('/teacher-status', authenticateToken, requireAdmin, getAllTeachersNotificationStatus);
 
 export default router;

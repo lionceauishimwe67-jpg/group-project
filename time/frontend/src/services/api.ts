@@ -78,9 +78,25 @@ api.interceptors.response.use(
           window.location.href = '/admin/login';
           break;
 
-        case 403:
-          console.error('[API] Forbidden access:', error.config?.url);
+        case 403: {
+          const forbiddenMsg = String(error.response.data?.error || '');
+          const isAuthFailure =
+            forbiddenMsg.toLowerCase().includes('token') ||
+            forbiddenMsg.toLowerCase().includes('invalid') ||
+            forbiddenMsg.toLowerCase().includes('expired') ||
+            forbiddenMsg.toLowerCase().includes('authentication');
+
+          if (isAuthFailure) {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            if (!window.location.pathname.includes('/login')) {
+              window.location.href = '/admin/login';
+            }
+          } else {
+            console.error('[API] Forbidden access:', error.config?.url, forbiddenMsg);
+          }
           break;
+        }
 
         case 404:
           console.error('[API] Resource not found:', error.config?.url);
@@ -160,6 +176,7 @@ export const authApi = {
 
 // Timetable API
 export const timetableApi = {
+  getAllClassesStatus: () => api.get('/api/timetable/all-classes-status'),
   getCurrentSessions: (params?: { classId?: number; level?: string }) =>
     api.get('/api/timetable/current-sessions', { params }),
   getToday: (params?: { classId?: number; dayOfWeek?: number; level?: string }) =>
@@ -214,6 +231,19 @@ export const displayApi = {
 // Teachers API
 export const teachersApi = {
   getAll: () => api.get('/api/teachers'),
+  getSubjects: () => api.get('/api/teachers/subjects'),
+  getClasses: () => api.get('/api/teachers/classes'),
+  getRooms: () => api.get('/api/teachers/rooms'),
+  getTeacherSubjects: (id: number) => api.get(`/api/teachers/${id}/subjects`),
+  getTeacherClasses: (id: number) => api.get(`/api/teachers/${id}/classes`),
+  getTeacherRooms: (id: number) => api.get(`/api/teachers/${id}/rooms`),
+  assignSubjects: (id: number, subjectIds: number[]) => api.post(`/api/teachers/${id}/subjects`, { subjectIds }),
+  assignClasses: (id: number, classIds: number[]) => api.post(`/api/teachers/${id}/classes`, { classIds }),
+  assignRooms: (id: number, roomIds: number[]) => api.post(`/api/teachers/${id}/rooms`, { roomIds }),
+  addSubject: (id: number, subjectId: number) => api.post(`/api/teachers/${id}/subjects/add`, { subjectId }),
+  removeSubject: (id: number, subjectId: number) => api.delete(`/api/teachers/${id}/subjects/${subjectId}`),
+  removeClass: (id: number, classId: number) => api.delete(`/api/teachers/${id}/classes/${classId}`),
+  removeRoom: (id: number, roomId: number) => api.delete(`/api/teachers/${id}/rooms/${roomId}`),
   create: (data: any) => api.post('/api/teachers', data),
   update: (id: number, data: any) => api.post('/api/teachers', { ...data, id }),
   delete: (id: number) => api.delete(`/api/teachers/${id}`),
@@ -227,8 +257,12 @@ export const notificationApi = {
     api.put('/api/notifications/preferences', data),
   getPreferences: () => api.get('/api/notifications/preferences'),
   getHistory: () => api.get('/api/notifications/history'),
-  sendTestNotification: (data: { teacherId: number }) =>
+  sendTestNotification: (data: { teacherId: number; via?: string }) =>
     api.post('/api/notifications/test', data),
+  markAsRead: (id: number) =>
+    api.post(`/api/notifications/${id}/read`),
+  getTeacherStatus: (params?: { teacher_id?: number; limit?: number; offset?: number }) =>
+    api.get('/api/notifications/teacher-status', { params }),
 };
 
 // Bell API (Smart Bell integration)
@@ -300,18 +334,6 @@ export const alumniApi = {
   update: (id: number, data: any) => api.put(`/api/alumni/${id}`, data),
   delete: (id: number) => api.delete(`/api/alumni/${id}`),
   getStats: () => api.get('/api/alumni/stats'),
-};
-
-// School Events API
-export const schoolEventApi = {
-  getAll: (params?: { type?: string; from?: string; to?: string; isPublic?: boolean; search?: string }) =>
-    api.get('/api/school-events', { params }),
-  getUpcoming: () => api.get('/api/school-events/upcoming'),
-  getById: (id: number) => api.get(`/api/school-events/${id}`),
-  create: (data: any) => api.post('/api/school-events', data),
-  update: (id: number, data: any) => api.put(`/api/school-events/${id}`, data),
-  delete: (id: number) => api.delete(`/api/school-events/${id}`),
-  getStats: () => api.get('/api/school-events/stats'),
 };
 
 // Uploads API

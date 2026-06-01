@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { timetableApi } from '../../services/api';
+import { timetableApi, notificationApi } from '../../services/api';
 import './TeacherDashboard.css';
 
 interface TimetableEntry {
@@ -86,6 +86,35 @@ const TeacherDashboard: React.FC = () => {
     } catch (error) {
       console.error('Error checking out:', error);
       alert('Failed to check out');
+    }
+  };
+
+  const getTeacherId = (): number => {
+    try {
+      const stored = localStorage.getItem('user');
+      if (stored) {
+        const u = JSON.parse(stored);
+        return u.teacherId || u.id || 1;
+      }
+    } catch {}
+    return 1;
+  };
+
+  const handleTestPush = async () => {
+    try {
+      await notificationApi.sendTestNotification({ teacherId: getTeacherId(), via: 'push' });
+      alert('✅ Test push notification yoherejwe!');
+    } catch (err: any) {
+      alert('❌ Yanze: ' + (err.response?.data?.error || err.message));
+    }
+  };
+
+  const handleTestSMS = async () => {
+    try {
+      await notificationApi.sendTestNotification({ teacherId: getTeacherId(), via: 'sms' });
+      alert('✅ Test SMS yoherejwe! Reba terefone yawe.');
+    } catch (err: any) {
+      alert('❌ Yanze: ' + (err.response?.data?.error || err.message));
     }
   };
 
@@ -178,6 +207,21 @@ const TeacherDashboard: React.FC = () => {
                   <p>Time: {lesson.start_time} - {lesson.end_time}</p>
                 </div>
               ))}
+            </div>
+          </div>
+
+          <div className="section test-notification">
+            <h2>📡 Testing System</h2>
+            <p style={{ color: '#6b7280', marginBottom: 16, fontSize: '0.9rem' }}>
+              Kanda hano kugirango ugere ko itumanaho rikora (SMS + Push)
+            </p>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button onClick={handleTestPush} className="btn-test" style={{ background: '#3b82f6', color: 'white', border: 'none', padding: '10px 20px', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>
+                📲 Test Push Notification
+              </button>
+              <button onClick={handleTestSMS} className="btn-test" style={{ background: '#10b981', color: 'white', border: 'none', padding: '10px 20px', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>
+                💬 Test SMS
+              </button>
             </div>
           </div>
         </div>

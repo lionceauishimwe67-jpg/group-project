@@ -314,6 +314,32 @@ export const initDatabase = async (): Promise<Database<sqlite3.Database, sqlite3
       FOREIGN KEY (subject_id) REFERENCES subjects(id) ON DELETE CASCADE
     )
   `);
+  await db.run(`
+    CREATE TABLE IF NOT EXISTS teacher_classes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      teacher_id INTEGER NOT NULL,
+      class_id INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(teacher_id, class_id),
+      FOREIGN KEY (teacher_id) REFERENCES teachers(id) ON DELETE CASCADE,
+      FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE
+    )
+  `);
+  await db.run(`
+    CREATE TABLE IF NOT EXISTS teacher_classrooms (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      teacher_id INTEGER NOT NULL,
+      classroom_id INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(teacher_id, classroom_id),
+      FOREIGN KEY (teacher_id) REFERENCES teachers(id) ON DELETE CASCADE,
+      FOREIGN KEY (classroom_id) REFERENCES classrooms(id) ON DELETE CASCADE
+    )
+  `);
+  await db.run(`CREATE INDEX IF NOT EXISTS idx_teacher_classes_teacher ON teacher_classes(teacher_id)`);
+  await db.run(`CREATE INDEX IF NOT EXISTS idx_teacher_classes_class ON teacher_classes(class_id)`);
+  await db.run(`CREATE INDEX IF NOT EXISTS idx_teacher_classrooms_teacher ON teacher_classrooms(teacher_id)`);
+  await db.run(`CREATE INDEX IF NOT EXISTS idx_teacher_classrooms_classroom ON teacher_classrooms(classroom_id)`);
   await db.run(`CREATE INDEX IF NOT EXISTS idx_chronogram_uploads_status ON chronogram_uploads(analysis_status)`);
   await db.run(`CREATE INDEX IF NOT EXISTS idx_timetable_generations_class ON timetable_generations(class_id)`);
   await db.run(`CREATE INDEX IF NOT EXISTS idx_timetable_generations_current ON timetable_generations(is_current)`);
@@ -367,6 +393,35 @@ const ensureEmailNotificationColumns = async (database: Database<sqlite3.Databas
   }
   if (!hasNotificationColumn('sent_via')) {
     await database.run(`ALTER TABLE notifications ADD COLUMN sent_via TEXT DEFAULT 'push'`);
+  }
+  if (!hasNotificationColumn('is_read')) {
+    await database.run(`ALTER TABLE notifications ADD COLUMN is_read INTEGER DEFAULT 0`);
+  }
+  if (!hasNotificationColumn('read_at')) {
+    await database.run(`ALTER TABLE notifications ADD COLUMN read_at DATETIME`);
+  }
+  if (!hasNotificationColumn('created_at')) {
+    await database.run(`ALTER TABLE notifications ADD COLUMN created_at DATETIME`);
+  }
+
+  const announcementColumns = await database.all(`PRAGMA table_info(announcements)`);
+  const hasAnnouncementColumn = (name: string) => announcementColumns.some((column: any) => column.name === name);
+
+  if (!hasAnnouncementColumn('text_content')) {
+    await database.run(`ALTER TABLE announcements ADD COLUMN text_content TEXT`);
+    await database.run(`UPDATE announcements SET text_content = content WHERE content IS NOT NULL`);
+  }
+  if (!hasAnnouncementColumn('expires_at')) {
+    await database.run(`ALTER TABLE announcements ADD COLUMN expires_at DATETIME`);
+  }
+  if (!hasAnnouncementColumn('image_data')) {
+    await database.run(`ALTER TABLE announcements ADD COLUMN image_data BLOB`);
+  }
+  if (!hasAnnouncementColumn('image_mime_type')) {
+    await database.run(`ALTER TABLE announcements ADD COLUMN image_mime_type TEXT`);
+  }
+  if (!hasAnnouncementColumn('is_approved_for_display')) {
+    await database.run(`ALTER TABLE announcements ADD COLUMN is_approved_for_display INTEGER DEFAULT 1`);
   }
 };
 

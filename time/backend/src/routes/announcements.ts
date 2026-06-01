@@ -12,7 +12,7 @@ import {
   getAnnouncementDeliveryStatus
 } from '../controllers/announcementController';
 import { authenticateToken, requireAdmin } from '../middleware/auth';
-import upload from '../middleware/upload';
+import announcementUpload from '../middleware/announcementUpload';
 import path from 'path';
 import fs from 'fs';
 import { query } from '../config/database';
@@ -60,9 +60,13 @@ router.get('/image/:id', async (req, res) => {
     res.setHeader('Access-Control-Allow-Methods', 'GET');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-    res.setHeader('Content-Type', image_mime_type || 'image/jpeg');
+    const mime = image_mime_type || 'application/octet-stream';
+    res.setHeader('Content-Type', mime);
     res.setHeader('Content-Length', imageData.length.toString());
-    
+    if (mime === 'application/pdf') {
+      res.setHeader('Content-Disposition', 'inline');
+    }
+
     res.send(imageData);
     console.log(`[Image Serve] Image sent successfully`);
   } catch (error) {
@@ -83,7 +87,7 @@ router.get('/file/:filename', (req, res) => {
   
   // If not found, search in subdirectories
   if (!fs.existsSync(filePath)) {
-    const subdirs = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'ico', 'bmp', 'tiff', 'avif', 'heic'];
+    const subdirs = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'ico', 'bmp', 'tiff', 'avif', 'heic', 'pdf', 'doc', 'docx'];
     for (const subdir of subdirs) {
       const subdirPath = path.join(announcementsDir, subdir, filename);
       if (fs.existsSync(subdirPath)) {
@@ -111,8 +115,8 @@ router.get('/images', authenticateToken, getAvailableImages);
 router.get('/:id/delivery-status', authenticateToken, requireAdmin, getAnnouncementDeliveryStatus);
 router.get('/:id', authenticateToken, getAnnouncement);
 router.post('/:id/mark-read', authenticateToken, markAnnouncementAsRead);
-router.post('/', authenticateToken, requireAdmin, upload.single('image'), createAnnouncement);
-router.put('/:id', authenticateToken, requireAdmin, upload.single('image'), updateAnnouncement);
+router.post('/', authenticateToken, requireAdmin, announcementUpload.single('image'), createAnnouncement);
+router.put('/:id', authenticateToken, requireAdmin, announcementUpload.single('image'), updateAnnouncement);
 router.delete('/:id', authenticateToken, requireAdmin, deleteAnnouncement);
 router.post('/reorder', authenticateToken, requireAdmin, reorderAnnouncements);
 

@@ -1,3 +1,35 @@
 *.zip
+*.7z
+*.tar.gz
+*.tgz
+*.pdf
+*.xlsx
+*.sqlite
+*.sqlite3
+*.db
+
 node_modules/
 .DS_Store
+
+# IDE
+.idea/
+.vscode/
+.windsurf/
+
+# Environment
+.env
+.env.local
+
+# Build outputs
+build/
+dist/
+*.tsbuildinfo
+
+# Logs
+*.log
+
+# Uploads
+time/backend/uploads/*
+
+# OS files
+Thumbs.db

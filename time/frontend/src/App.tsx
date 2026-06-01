@@ -1,6 +1,8 @@
 import React from 'react';
+import './tailwind.css';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuthContext } from './context/AuthContext';
+import { User } from './types';
 import { SocketProvider } from './context/SocketContext';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -15,23 +17,22 @@ import FullTimetableView from './pages/Admin/FullTimetableView';
 import AnnouncementsManager from './pages/Admin/AnnouncementsManager';
 import PhoneNumbersManager from './pages/Admin/PhoneNumbersManager';
 import TeacherProfile from './pages/Admin/TeacherProfile';
-import SchoolEventsManager from './pages/Admin/SchoolEventsManager';
 import Profile from './pages/Admin/Profile';
 import ParentsManager from './pages/Admin/ParentsManager';
 import TeacherNotificationSetup from './pages/Teacher/TeacherNotificationSetup';
 import ManagerDashboard from './pages/Manager/ManagerDashboard';
-import TeacherDashboard from './pages/Teacher/TeacherDashboard';
 import TeacherAnnouncements from './pages/Teacher/TeacherAnnouncements';
 import ScheduleManagement from './pages/Admin/ScheduleManagement';
 import TimetableGenerator from './pages/Admin/TimetableGenerator';
 import SmartTimetableSystem from './pages/Admin/SmartTimetableSystem';
+import NotificationStatus from './pages/Admin/NotificationStatus';
 import About from './pages/Home/About';
 import Contact from './pages/Home/Contact';
 
 // Components
 import { ToastProvider } from './components/ToastNotification';
 
-// Protected route component
+// Protected route — any logged-in user
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuthContext();
 
@@ -46,15 +47,32 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   return <>{children}</>;
 };
 
+// Admin panel — requires admin role (fixes 403 when teacher token is in browser)
+const AdminProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { isAuthenticated, isLoading, user } = useAuthContext();
+
+  if (isLoading) {
+    return <div style={{ padding: 40, textAlign: 'center' }}>Loading...</div>;
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/admin/login" replace />;
+  }
+
+  if (user?.role !== 'admin') {
+    return <Navigate to="/admin/login" replace state={{ error: 'Admin account required' }} />;
+  }
+
+  return <>{children}</>;
+};
+
 // Secret login wrapper
 const SecretLoginWrapper: React.FC = () => {
-  const { login } = useAuthContext();
+  const { setSession } = useAuthContext();
   const navigate = useNavigate();
 
   const handleLogin = (token: string) => {
-    // Store token and user info directly for secret login
-    localStorage.setItem('token', token);
-    localStorage.setItem('user', JSON.stringify({ id: 0, username: 'admin', role: 'admin' }));
+    setSession(token, { id: 0, username: 'admin', role: 'admin' } as User);
     navigate('/admin/dashboard');
   };
 
@@ -70,7 +88,7 @@ const App: React.FC = () => {
             <Router future={{ v7_relativeSplatPath: true }}>
             <Routes>
               {/* Public Display Route */}
-              <Route path="/display" element={<Display filterClassId={undefined} filterLevel={undefined} />} />
+              <Route path="/display" element={<Display />} />
 
               {/* Admin Login */}
               <Route path="/admin/login" element={<Login />} />
@@ -80,9 +98,9 @@ const App: React.FC = () => {
               <Route
                 path="/admin"
                 element={
-                  <ProtectedRoute>
+                  <AdminProtectedRoute>
                     <Admin />
-                  </ProtectedRoute>
+                  </AdminProtectedRoute>
                 }
               >
                 <Route index element={<Navigate to="dashboard" replace />} />
@@ -95,7 +113,7 @@ const App: React.FC = () => {
                 <Route path="teachers" element={<TeacherProfile />} />
                 <Route path="announcements" element={<AnnouncementsManager />} />
                 <Route path="phone-numbers" element={<PhoneNumbersManager />} />
-                <Route path="school-events" element={<SchoolEventsManager />} />
+                <Route path="notifications" element={<NotificationStatus />} />
                 <Route path="profile" element={<Profile />} />
                 <Route path="parents" element={<ParentsManager />} />
               </Route>
@@ -106,8 +124,6 @@ const App: React.FC = () => {
               {/* Manager Dashboard (protected) */}
               <Route path="/manager" element={<ProtectedRoute><ManagerDashboard /></ProtectedRoute>} />
 
-              {/* Teacher Dashboard (protected) */}
-              <Route path="/teacher/dashboard" element={<ProtectedRoute><TeacherDashboard /></ProtectedRoute>} />
               <Route path="/teacher/announcements" element={<ProtectedRoute><TeacherAnnouncements /></ProtectedRoute>} />
 
               {/* Public Pages */}

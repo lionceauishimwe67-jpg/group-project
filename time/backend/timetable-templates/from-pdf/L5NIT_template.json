@@ -1,0 +1,136 @@
+{
+  "days": [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday"
+  ],
+  "classes": [
+    {
+      "id": 19,
+      "name": "L5NIT",
+      "level": "L5",
+      "students": 40
+    }
+  ],
+  "subjects": [
+    {
+      "name": "CCMBO",
+      "teacher": "NYIRANSABIMANA Venantie",
+      "hours_per_week": 3,
+      "availability": "Full Day"
+    },
+    {
+      "name": "NITLS",
+      "teacher": "NTIBIBUKA Eraste",
+      "hours_per_week": 3,
+      "availability": "Full Day"
+    },
+    {
+      "name": "NITCS",
+      "teacher": "NDABAKURANYE Pierre Claver",
+      "hours_per_week": 5,
+      "availability": "Full Day"
+    },
+    {
+      "name": "NITML",
+      "teacher": "NDABAKURANYE Pierre Claver",
+      "hours_per_week": 5,
+      "availability": "Full Day"
+    },
+    {
+      "name": "CCMCZ",
+      "teacher": "UWERA Patricie",
+      "hours_per_week": 1,
+      "availability": "Full Day"
+    },
+    {
+      "name": "MATH",
+      "teacher": "MINANI Xavier",
+      "hours_per_week": 5,
+      "availability": "Full Day"
+    },
+    {
+      "name": "NITZC",
+      "teacher": "MUKAMUGEMa Viviane",
+      "hours_per_week": 3,
+      "availability": "Full Day"
+    },
+    {
+      "name": "NITL",
+      "teacher": "NTIBIBUKA Eraste",
+      "hours_per_week": 3,
+      "availability": "Full Day"
+    },
+    {
+      "name": "GENPP",
+      "teacher": "MUKAMUGEMa Viviane",
+      "hours_per_week": 3,
+      "availability": "Full Day"
+    },
+    {
+      "name": "CCMEN",
+      "teacher": "NIYONZOMA Jean Bosco",
+      "hours_per_week": 2,
+      "availability": "Full Day"
+    },
+    {
+      "name": "NITCC",
+      "teacher": "MUKAMUGEMa Viviane",
+      "hours_per_week": 5,
+      "availability": "Full Day"
+    },
+    {
+      "name": "CCMKK",
+      "teacher": "KAGABO Emmanuel",
+      "hours_per_week": 1,
+      "availability": "Full Day"
+    },
+    {
+      "name": "CCMIW",
+      "teacher": "NSABIMANA Anastase",
+      "hours_per_week": 2,
+      "availability": "Full Day"
+    },
+    {
+      "name": "GENDW",
+      "teacher": "IGIHOZO Bonnette",
+      "hours_per_week": 4,
+      "availability": "Full Day"
+    },
+    {
+      "name": "CCMKN",
+      "teacher": "KWIZERA Israel",
+      "hours_per_week": 3,
+      "availability": "Full Day"
+    }
+  ],
+  "rules": [
+    "A teacher cannot teach two classes at the same time",
+    "Subject hours must match weekly requirements",
+    "Avoid repeating the same subject more than 2 times in one day",
+    "Teachers must follow availability constraints",
+    "Every class must have a balanced schedule",
+    "Core subjects should be in morning slots",
+    "Break times must be respected"
+  ],
+  "time_slots": [
+    "07:50-08:10",
+    "08:10-08:50",
+    "08:50-09:30",
+    "09:30-10:10",
+    "10:10-10:25",
+    "10:25-11:05",
+    "11:05-11:45",
+    "11:45-12:25",
+    "12:25-13:30",
+    "13:30-14:10",
+    "14:10-14:50",
+    "14:50-15:30",
+    "15:30-15:40",
+    "15:40-16:20",
+    "16:20-17:00"
+  ],
+  "classId": 19
+}

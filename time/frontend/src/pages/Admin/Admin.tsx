@@ -57,13 +57,13 @@ const Admin: React.FC = () => {
             <span className="nav-icon">📢</span>
             Announcements
           </NavLink>
+          <NavLink to="/admin/notifications" className="nav-item">
+            <span className="nav-icon">🔔</span>
+            Notification Status
+          </NavLink>
           <NavLink to="/admin/phone-numbers" className="nav-item">
             <span className="nav-icon">📱</span>
             Phone Numbers (SMS)
-          </NavLink>
-          <NavLink to="/admin/school-events" className="nav-item">
-            <span className="nav-icon">📅</span>
-            School Events
           </NavLink>
           <NavLink to="/admin/profile" className="nav-item">
             <span className="nav-icon">👤</span>
@@ -72,10 +72,6 @@ const Admin: React.FC = () => {
           <NavLink to="/manager" className="nav-item">
             <span className="nav-icon">👔</span>
             Manager Dashboard
-          </NavLink>
-          <NavLink to="/teacher/dashboard" className="nav-item">
-            <span className="nav-icon">🏫</span>
-            Teacher Dashboard
           </NavLink>
         </nav>
 

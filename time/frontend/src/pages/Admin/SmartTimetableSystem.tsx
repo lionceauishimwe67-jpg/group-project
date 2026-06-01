@@ -1,5 +1,9 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { smartTimetableApi, timetableApi } from '../../services/api';
+import { TimetableCardsGrid, mapIdEntriesToLessons } from '../../components/TimetableCards';
+import { SchoolTimetableGrid } from '../../components/SchoolTimetableGrid';
+import { FIXED_SCHOOL_CHRONO_SLOTS, STANDARD_SCHOOL_SLOTS } from '../../config/schoolTimetableFormat';
 import './SmartTimetableSystem.css';
 
 interface UploadResult {
@@ -36,21 +40,11 @@ interface CurrentActivity {
   remainingMinutes: number;
 }
 
-const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-const DEF_SLOTS = [
-  { label: 'Period 1', startTime: '08:10', endTime: '09:00', isBreak: false, isLunch: false },
-  { label: 'Period 2', startTime: '09:00', endTime: '09:50', isBreak: false, isLunch: false },
-  { label: 'Short Break', startTime: '09:50', endTime: '10:10', isBreak: true, isLunch: false },
-  { label: 'Period 3', startTime: '10:10', endTime: '10:55', isBreak: false, isLunch: false },
-  { label: 'Period 4', startTime: '10:55', endTime: '11:45', isBreak: false, isLunch: false },
-  { label: 'Period 5', startTime: '11:45', endTime: '12:35', isBreak: false, isLunch: false },
-  { label: 'Lunch Break', startTime: '12:35', endTime: '13:35', isBreak: false, isLunch: true },
-  { label: 'Period 6', startTime: '13:35', endTime: '14:25', isBreak: false, isLunch: false },
-  { label: 'Period 7', startTime: '14:25', endTime: '15:15', isBreak: false, isLunch: false },
-];
+type UploadMode = 'file' | 'chrono' | 'template';
 
 const STS: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'upload'|'analyze'|'generate'|'preview'|'activity'>('upload');
+  const [activeTab, setActiveTab] = useState<'dashboard'|'upload'|'analyze'|'generate'|'preview'|'activity'>('dashboard');
+  const [uploadMode, setUploadMode] = useState<UploadMode>('chrono');
   const [file, setFile] = useState<File|null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -69,8 +63,10 @@ const STS: React.FC = () => {
   const [realTime, setRealTime] = useState<string>('');
   const [history, setHistory] = useState<any[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<'none'|'history'|'timetable'|'full'>('none');
+  const [deletingId, setDeletingId] = useState<number|null>(null);
   const [deleting, setDeleting] = useState(false);
   const [isJsonFile, setIsJsonFile] = useState(false);
+  const [previewView, setPreviewView] = useState<'school' | 'cards'>('school');
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -128,31 +124,93 @@ const STS: React.FC = () => {
       setUploadResult(null);
       setValidation(null);
       setGeneration(null);
-      // Auto-detect JSON files for direct generation
-      if (f.name.toLowerCase().endsWith('.json')) {
-        setIsJsonFile(true);
-      } else {
-        setIsJsonFile(false);
+      const json = f.name.toLowerCase().endsWith('.json');
+      setIsJsonFile(json);
+      if (json) setUploadMode('template');
+    }
+  };
+
+  const downloadTemplate = () => {
+    const a = document.createElement('a');
+    a.href = '/timetable-template.json';
+    a.download = 'timetable-template.json';
+    a.click();
+  };
+
+  const exportChronogramJson = () => {
+    const blob = new Blob([JSON.stringify({ timeSlots: FIXED_SCHOOL_CHRONO_SLOTS, classId: selectedClass || undefined, note: 'Amasaha ntahinduka — format y\'ishuri ifite agaciro gusa' }, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `chronogram-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const applyGenerationResponse = async (data: GenerationResult | null) => {
+    if (!data) return;
+    setGeneration(data);
+    setActiveTab('preview');
+    loadHistory();
+    if (data.generationId) {
+      setSaving(true);
+      try {
+        await smartTimetableApi.saveTimetable(data.generationId);
+        setSaveMsg('Timetable yakozwe kandi yabitswe — reba mu Full Timetable View');
+      } catch (e: any) {
+        setSaveMsg(e.response?.data?.error || 'Yakozwe ariko kubika byanze — kanda Save');
+      } finally {
+        setSaving(false);
       }
     }
   };
 
+  const doGenerateFromSlots = async () => {
+    if (!selectedClass) { setErr('Hitamo ishuri (class) mbere yo gukora timetable'); return; }
+    setGenerating(true); setErr('');
+    try {
+      const r = await smartTimetableApi.generateFromChronogram({
+        classId: selectedClass,
+      });
+      await applyGenerationResponse(r.data?.data || null);
+    } catch (e: any) {
+      setErr(e.response?.data?.error || 'Gukora timetable byanze');
+    } finally { setGenerating(false); }
+  };
+
   const doUpload = async () => {
-    if (!file) { setErr('Select a file first'); return; }
+    if (uploadMode === 'chrono') {
+      await doGenerateFromSlots();
+      return;
+    }
+    if (!file) { setErr('Hitamo dosiye ya chronogram'); return; }
+    if (!selectedClass && uploadMode === 'template') {
+      setErr('Hitamo ishuri (class) mbere yo gukora timetable');
+      return;
+    }
     setUploading(true); setErr(''); setUploadProgress(0);
     try {
-      if (isJsonFile) {
-        // Handle JSON files directly - read content and generate timetable
+      if (uploadMode === 'template') {
         const jsonContent = await file.text();
         const payload = JSON.parse(jsonContent);
+        if (!payload.classId && selectedClass) payload.classId = selectedClass;
+        if (!payload.classId) {
+          setErr('JSON template igomba kugira classId cyangwa hitamo ishuri hejuru');
+          return;
+        }
         setUploadProgress(50);
         const r = await smartTimetableApi.generateFromChronogram(payload);
-        setGeneration(r.data?.data || null);
-        setActiveTab('preview');
+        await applyGenerationResponse(r.data?.data || null);
       } else {
-        // Handle other files through normal upload process
         const r = await smartTimetableApi.uploadChronogram(file, (p) => setUploadProgress(p));
         setUploadResult(r.data);
+        if (r.data?.chronogram?.className) {
+          const match = classes.find((c) =>
+            c.name?.toLowerCase() === r.data.chronogram.className?.toLowerCase() ||
+            c.name?.toLowerCase().includes(r.data.chronogram.className?.toLowerCase())
+          );
+          if (match) setSelectedClass(match.id);
+        }
         setActiveTab('analyze');
       }
     } catch (e: any) {
@@ -177,8 +235,7 @@ const STS: React.FC = () => {
     setGenerating(true); setErr(''); setGeneration(null);
     try {
       const r = await smartTimetableApi.generateTimetable(uploadResult.uploadId, selectedClass as number);
-      setGeneration(r.data?.data || null);
-      setActiveTab('preview');
+      await applyGenerationResponse(r.data?.data || null);
     } catch (e: any) {
       setErr(e.response?.data?.error || 'Generation failed');
     } finally { setGenerating(false); }
@@ -251,100 +308,360 @@ const STS: React.FC = () => {
     } finally { setDeleting(false); }
   };
 
-  const buildGrid = useCallback(() => {
-    if (!generation?.entries?.length) return { slots: DEF_SLOTS, grid: [] as any[][] };
-    const slots = [...DEF_SLOTS];
-    const grid: any[][] = [];
-    for (let d = 1; d <= 5; d++) {
-      const row: any[] = [];
-      for (let s = 0; s < slots.length; s++) {
-        const entry = generation.entries.find((e: any) => e.day_of_week === d && e.start_time === slots[s].startTime && e.end_time === slots[s].endTime);
-        row.push(entry || null);
-      }
-      grid.push(row);
-    }
-    return { slots, grid };
-  }, [generation]);
-
-  const { slots, grid } = buildGrid();
-
   const getSubjectName = (subjectId: number) => refData?.subjects?.find((s: any) => s.id === subjectId)?.name || 'Unknown';
   const getTeacherName = (teacherId: number) => refData?.teachers?.find((t: any) => t.id === teacherId)?.name || 'Unassigned';
   const getClassroomName = (classroomId: number) => refData?.classrooms?.find((c: any) => c.id === classroomId)?.name || '';
 
+  const previewLessons = useMemo(() => {
+    if (!generation?.entries?.length || !refData) return [];
+    return mapIdEntriesToLessons(generation.entries, refData);
+  }, [generation, refData]);
+
+  const dashboardStats = useMemo(() => [
+    { icon: '🏫', label: 'Amashuri (Classes)', value: String(classes.length), color: '#3b82f6' },
+    { icon: '👨‍🏫', label: 'Abarimu', value: String(refData?.teachers?.length ?? 0), color: '#10b981' },
+    { icon: '📚', label: 'Amasomo', value: String(refData?.subjects?.length ?? 0), color: '#8b5cf6' },
+    {
+      icon: '📋',
+      label: 'Generations',
+      value: String(history.length),
+      color: '#f59e0b',
+    },
+  ], [classes.length, refData, history.length]);
+
+  const workflowSteps = useMemo(
+    () => [
+      { id: 'upload' as const, num: 1, label: 'Chronogram', done: !!uploadResult || !!generation },
+      { id: 'analyze' as const, num: 2, label: 'Analysis', done: !!validation },
+      { id: 'generate' as const, num: 3, label: 'Generate', done: !!generation },
+      { id: 'preview' as const, num: 4, label: 'Preview & Save', done: !!generation?.generationId },
+    ],
+    [uploadResult, validation, generation]
+  );
+
+  const lastHistory = history[0];
+
+  const workflowProgress = useMemo(() => {
+    const done = workflowSteps.filter((s) => s.done).length;
+    return Math.round((done / workflowSteps.length) * 100);
+  }, [workflowSteps]);
+
   return (
     <div className="sts-container">
       <header className="sts-header">
-        <h1>Smart School Timetable System</h1>
+        <div>
+          <h1>Smart School Timetable System</h1>
+          <p className="sts-subtitle">Shyiramo chronogram — sisitemu ikora timetable</p>
+        </div>
         <div className="sts-clock">{realTime}</div>
       </header>
 
       {err && <div className="sts-alert sts-alert-err" onClick={() => setErr('')}>{err} <span className="sts-close">×</span></div>}
-      {saveMsg && <div className={`sts-alert ${saveMsg.includes('success') ? 'sts-alert-ok' : 'sts-alert-err'}`} onClick={() => setSaveMsg('')}>{saveMsg} <span className="sts-close">×</span></div>}
+      {saveMsg && <div className={`sts-alert ${saveMsg.includes('success') || saveMsg.includes('neza') ? 'sts-alert-ok' : 'sts-alert-err'}`} onClick={() => setSaveMsg('')}>{saveMsg} <span className="sts-close">×</span></div>}
 
       <nav className="sts-tabs">
-        <button className={activeTab==='upload'?'active':''} onClick={()=>setActiveTab('upload')}>1. Upload</button>
-        <button className={activeTab==='analyze'?'active':''} onClick={()=>setActiveTab('analyze')} disabled={!uploadResult}>2. AI Analysis</button>
-        <button className={activeTab==='generate'?'active':''} onClick={()=>setActiveTab('generate')} disabled={!validation}>3. Generate</button>
-        <button className={activeTab==='preview'?'active':''} onClick={()=>setActiveTab('preview')} disabled={!generation}>4. Preview</button>
-        <button className={activeTab==='activity'?'active':''} onClick={()=>setActiveTab('activity')}>Live Activity</button>
+        <button type="button" className={activeTab==='dashboard'?'active':''} onClick={()=>setActiveTab('dashboard')}>Dashboard</button>
+        <button type="button" className={activeTab==='upload'?'active':''} onClick={()=>setActiveTab('upload')}>1. Chronogram</button>
+        <button type="button" className={activeTab==='analyze'?'active':''} onClick={()=>setActiveTab('analyze')} disabled={!uploadResult}>2. Analysis</button>
+        <button type="button" className={activeTab==='generate'?'active':''} onClick={()=>setActiveTab('generate')} disabled={!validation}>3. Generate</button>
+        <button type="button" className={activeTab==='preview'?'active':''} onClick={()=>setActiveTab('preview')} disabled={!generation}>4. Preview</button>
+        <button type="button" className={activeTab==='activity'?'active':''} onClick={()=>setActiveTab('activity')}>Live</button>
       </nav>
 
       <div className="sts-main">
+        {activeTab === 'dashboard' && (
+          <section className="sts-panel sts-dashboard-panel">
+            <div className="sts-dash-hero">
+              <div className="sts-dash-hero-text">
+                <span className="sts-dash-badge">AI Timetable</span>
+                <h2>Professional Timetable Control</h2>
+                <p>Generate, preview, and publish school timetables using the official period format (Mon–Fri grid).</p>
+              </div>
+              <div className="sts-dash-hero-actions">
+                <div className="sts-form-row sts-dash-class">
+                  <label>Active class</label>
+                  <select value={selectedClass} onChange={(e) => setSelectedClass(e.target.value ? +e.target.value : '')}>
+                    <option value="">Select class...</option>
+                    {classes.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+                {selectedClass && (
+                  <Link className="sts-btn sts-btn-outline" to={`/admin/timetable/view?classId=${selectedClass}`}>
+                    Open Full Timetable
+                  </Link>
+                )}
+              </div>
+            </div>
+
+            <div className="sts-dash-progress">
+              <div className="sts-dash-progress-head">
+                <span>Workflow completion</span>
+                <strong>{workflowProgress}%</strong>
+              </div>
+              <div className="sts-dash-progress-bar">
+                <div className="sts-dash-progress-fill" style={{ width: `${workflowProgress}%` }} />
+              </div>
+            </div>
+
+            <div className="sts-stats-grid">
+              {dashboardStats.map((stat, i) => (
+                <div key={i} className="sts-stat-card" style={{ '--sts-stat-color': stat.color } as React.CSSProperties}>
+                  <span className="sts-stat-icon">{stat.icon}</span>
+                  <div>
+                    <div className="sts-stat-label">{stat.label}</div>
+                    <div className="sts-stat-value">{stat.value}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="sts-workflow">
+              <h3>Workflow steps</h3>
+              <div className="sts-workflow-steps">
+                {workflowSteps.map((step) => (
+                  <button
+                    key={step.id}
+                    type="button"
+                    className={`sts-workflow-step ${step.done ? 'done' : ''}`}
+                    onClick={() => setActiveTab(step.id)}
+                    disabled={step.id === 'analyze' && !uploadResult}
+                  >
+                    <span className="sts-step-num">{step.done ? '✓' : step.num}</span>
+                    <span>{step.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="sts-dash-actions-grid">
+              <button
+                type="button"
+                className="sts-dash-action-card"
+                onClick={() => { setUploadMode('chrono'); setActiveTab('upload'); }}
+              >
+                <span className="sts-dash-action-icon">⏰</span>
+                <strong>Amasaha (Chronogram)</strong>
+                <p>Andika periods, ukande Kora Timetable</p>
+              </button>
+              <button
+                type="button"
+                className="sts-dash-action-card"
+                onClick={() => { setUploadMode('file'); setActiveTab('upload'); }}
+              >
+                <span className="sts-dash-action-icon">📄</span>
+                <strong>Upload PDF/Excel</strong>
+                <p>AI isuzuma chronogram yawe</p>
+              </button>
+              <button
+                type="button"
+                className="sts-dash-action-card"
+                onClick={() => { setUploadMode('template'); setActiveTab('upload'); }}
+              >
+                <span className="sts-dash-action-icon">📋</span>
+                <strong>JSON Template</strong>
+                <p>Upload template yuzuye</p>
+              </button>
+              <button
+                type="button"
+                className="sts-dash-action-card"
+                onClick={() => setActiveTab('preview')}
+                disabled={!generation}
+              >
+                <span className="sts-dash-action-icon">👁</span>
+                <strong>Preview Timetable</strong>
+                <p>{generation ? `${generation.entryCount} entries` : 'Banza ukore timetable'}</p>
+              </button>
+              <button
+                type="button"
+                className="sts-dash-action-card"
+                onClick={() => setActiveTab('activity')}
+              >
+                <span className="sts-dash-action-icon">📡</span>
+                <strong>Live Activity</strong>
+                <p>Reba icyo bigenda ubu</p>
+              </button>
+              <button
+                type="button"
+                className="sts-dash-action-card sts-dash-action-outline"
+                onClick={() => window.open('/display', '_blank')}
+              >
+                <span className="sts-dash-action-icon">📺</span>
+                <strong>Display Screen</strong>
+                <p>Fungura ecran y&apos;ishuri</p>
+              </button>
+            </div>
+
+            {generation && (
+              <div className="sts-dash-summary sts-dash-summary-pro">
+                <div>
+                  <h3>Latest generation</h3>
+                  <p className="sts-dash-summary-meta">
+                    <span className="sts-pill">{generation.className}</span>
+                    <span>{generation.entryCount} lessons</span>
+                    <span className={generation.conflicts.length ? 'sts-pill-warn' : 'sts-pill-ok'}>
+                      {generation.conflicts.length} conflicts
+                    </span>
+                  </p>
+                </div>
+                <div className="sts-actions">
+                  <button type="button" className="sts-btn-primary" onClick={() => setActiveTab('preview')}>Preview grid</button>
+                  {selectedClass && (
+                    <Link className="sts-btn" to={`/admin/timetable/view?classId=${selectedClass}`}>Full view</Link>
+                  )}
+                  <button type="button" className="sts-btn-success" onClick={doSave} disabled={saving}>
+                    {saving ? 'Saving...' : 'Save again'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {lastHistory && (
+              <div className="sts-dash-recent">
+                <h3>Iheruka (Recent)</h3>
+                <p>
+                  <strong>{lastHistory.class_name}</strong> — {new Date(lastHistory.created_at).toLocaleString()}
+                  {' · '}{lastHistory.chronogram_name || 'Chronogram'}
+                </p>
+              </div>
+            )}
+          </section>
+        )}
+
         {activeTab==='upload' && (
           <section className="sts-panel">
-            <h2>Upload Timetable File</h2>
-            {isJsonFile ? (
-              <p className="sts-hint">Upload a JSON file with complete timetable data to generate timetable directly.</p>
-            ) : (
-              <p className="sts-hint">Upload a timetable file containing subject assignments. Supported formats: Excel (.xlsx/.xls), PDF, Word (.docx), CSV, or images.</p>
-            )}
-            {isJsonFile ? (
-              <div className="sts-instructions">
-                <h4>JSON File Format:</h4>
-                <p>Your JSON file should contain:</p>
-                <ul>
-                  <li><strong>days:</strong> Array of day names (e.g., ["Monday", "Tuesday", ...])</li>
-                  <li><strong>classes:</strong> Array of class objects with id, name, level, students</li>
-                  <li><strong>subjects:</strong> Array of subject objects with name, teacher, hours_per_week, availability</li>
-                  <li><strong>time_slots:</strong> Array of time slot strings (e.g., ["08:00-09:00", "09:00-10:00"])</li>
-                  <li><strong>classId:</strong> The ID of the class to generate timetable for</li>
-                </ul>
-                <p><em>Use the timetable-template.json file as a reference.</em></p>
-              </div>
-            ) : (
-              <div className="sts-instructions">
-                <h4>Expected File Format:</h4>
-                <ul>
-                  <li><strong>Excel/CSV:</strong> Timetable grid with time slots in first column, days as headers, subjects with teacher IDs in cells (e.g., "MATH(19)")</li>
-                  <li><strong>PDF/Word:</strong> Structured timetable with clear time slots and subject assignments</li>
-                  <li><strong>Images:</strong> Scanned timetables (OCR will attempt to extract data)</li>
-                </ul>
-                <p><em>Note: Files containing only teacher lists or availability schedules won't work. You need actual timetable grids showing when subjects are taught.</em></p>
-              </div>
-            )}
-            <div className="sts-upload-zone" onClick={()=>fileRef.current?.click()} onDrop={(e)=>{e.preventDefault();const f=e.dataTransfer.files[0];if(f){setFile(f);setErr('');}}} onDragOver={(e)=>e.preventDefault()}>
-              <input type="file" ref={fileRef} style={{display:'none'}} accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.txt,.json,.png,.jpg,.jpeg,.bmp,.webp,.tiff" onChange={handleFile} />
-              <div className="sts-upload-icon">Upload</div>
-              <p>{file ? file.name : 'Drag & drop or click to browse'}</p>
-              {file && <span className="sts-meta">{Math.round(file.size/1024)} KB • {file.type || 'unknown'}</span>}
+            <h2>1. Shyiramo Chronogram</h2>
+            <p className="sts-hint">Amasaha ni format y&apos;ishuri gusa (ntibihinduka). Upload PDF/Excel cyangwa JSON kugira ngo ushyiremo amasomo.</p>
+
+            <div className="sts-mode-tabs">
+              <button type="button" className={uploadMode==='chrono'?'active':''} onClick={()=>setUploadMode('chrono')}>Amasaha (Chronogram)</button>
+              <button type="button" className={uploadMode==='file'?'active':''} onClick={()=>setUploadMode('file')}>Upload PDF/Excel</button>
+              <button type="button" className={uploadMode==='template'?'active':''} onClick={()=>setUploadMode('template')}>JSON Template</button>
             </div>
-            {uploading && (
-              <div className="sts-progress">
-                <div className="sts-progress-bar" style={{width:`${uploadProgress}%`}}></div>
-                <span>{isJsonFile ? 'Generating timetable from JSON...' : 'Analyzing with AI...'} {uploadProgress}%</span>
-              </div>
-            )}
-            <div className="sts-actions">
-              <button className="sts-btn-primary" onClick={doUpload} disabled={!file||uploading}>{uploading?'Processing...':(isJsonFile?'Generate Timetable':'AI Analyze File')}</button>
+
+            <div className="sts-form-row">
+              <label>Ishuri (Class) *</label>
+              <select value={selectedClass} onChange={e=>setSelectedClass(e.target.value?+e.target.value:'')}>
+                <option value="">Hitamo ishuri...</option>
+                {classes.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
             </div>
-            {uploadResult && (
-              <div className="sts-result-box">
-                <h4>Extracted Data</h4>
-                <p><strong>Subjects found:</strong> {uploadResult.chronogram?.subjects?.length || 0}</p>
-                <p><strong>Time slots found:</strong> {uploadResult.chronogram?.timeSlots?.length || 0}</p>
-                <p><strong>Class detected:</strong> {uploadResult.chronogram?.className || 'None'}</p>
-              </div>
+
+            {uploadMode === 'chrono' && (
+              <>
+                <p className="sts-hint sts-hint-locked">
+                  Amasaha ni format y&apos;ishuri — ntibishobora guhindurwa. Hitamo class ukande Kora Timetable.
+                </p>
+                <div className="sts-chrono-table-wrap sts-chrono-readonly">
+                  <table className="sts-chrono-table">
+                    <thead><tr><th>Izina</th><th>Guhera</th><th>Gusoza</th><th>Break</th><th>Lunch</th></tr></thead>
+                    <tbody>
+                      {FIXED_SCHOOL_CHRONO_SLOTS.map((slot, i) => (
+                        <tr key={i} className={slot.isBreak ? 'sts-chrono-break' : slot.isLunch ? 'sts-chrono-lunch' : ''}>
+                          <td>{slot.label}</td>
+                          <td>{slot.startTime}</td>
+                          <td>{slot.endTime}</td>
+                          <td>{slot.isBreak ? '✓' : ''}</td>
+                          <td>{slot.isLunch ? '✓' : ''}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="sts-actions">
+                  <button type="button" className="sts-btn" onClick={exportChronogramJson}>Export JSON</button>
+                  <button type="button" className="sts-btn-primary" onClick={doGenerateFromSlots} disabled={generating||!selectedClass}>
+                    {generating ? 'Birimo gukorwa...' : 'Kora Timetable'}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {uploadMode === 'file' && (
+              <>
+                <div className="sts-instructions">
+                  <h4>Dosiye yemewe (PDF / Excel / Word / image)</h4>
+                  <ul>
+                    <li><strong>Excel/CSV:</strong> Grid ifite amasaha n&apos;amasomo (urugero: MATH(19))</li>
+                    <li><strong>PDF/Word:</strong> Chronogram cyangwa timetable y&apos;ishuri</li>
+                    <li><strong>Images:</strong> Scan — OCR izagerageza gusoma</li>
+                  </ul>
+                  <p><em>Nyuma yo gusuzuma: Validate → Generate → Preview → Save</em></p>
+                </div>
+                <div
+                  className="sts-upload-zone"
+                  onClick={() => fileRef.current?.click()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const f = e.dataTransfer.files[0];
+                    if (f) {
+                      setFile(f);
+                      setErr('');
+                      setIsJsonFile(false);
+                    }
+                  }}
+                  onDragOver={(e) => e.preventDefault()}
+                >
+                  <input
+                    type="file"
+                    ref={fileRef}
+                    style={{ display: 'none' }}
+                    accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.txt,.png,.jpg,.jpeg,.bmp,.webp,.tiff"
+                    onChange={handleFile}
+                  />
+                  <div className="sts-upload-icon">Upload</div>
+                  <p>{file ? file.name : 'Kurura dosiye hano cyangwa kanda'}</p>
+                  {file && <span className="sts-meta">{Math.round(file.size / 1024)} KB</span>}
+                </div>
+                {uploading && (
+                  <div className="sts-progress">
+                    <div className="sts-progress-bar" style={{ width: `${uploadProgress}%` }} />
+                    <span>Gusuzuma chronogram... {uploadProgress}%</span>
+                  </div>
+                )}
+                <div className="sts-actions">
+                  <button type="button" className="sts-btn-primary" onClick={doUpload} disabled={!file || uploading}>
+                    {uploading ? 'Birimo...' : 'Suzuma Chronogram (AI)'}
+                  </button>
+                </div>
+                {uploadResult && (
+                  <div className="sts-result-box">
+                    <h4>Byabonetse</h4>
+                    <p><strong>Amasomo:</strong> {uploadResult.chronogram?.subjects?.length || 0}</p>
+                    <p><strong>Amasaha (format y&apos;ishuri):</strong> {STANDARD_SCHOOL_SLOTS.length} slots — ntibishobora guhindurwa</p>
+                    <p><strong>Class:</strong> {uploadResult.chronogram?.className || 'Ntabwo byabonetse'}</p>
+                  </div>
+                )}
+              </>
+            )}
+
+            {uploadMode === 'template' && (
+              <>
+                <div className="sts-instructions">
+                  <h4>JSON Template</h4>
+                  <p>Upload <code>timetable-template.json</code> — hitamo ishuri (class) hejuru.</p>
+                  <ul>
+                    <li><strong>classes</strong>, <strong>subjects</strong>, <strong>time_slots</strong>, <strong>classId</strong></li>
+                  </ul>
+                  <button type="button" className="sts-btn" onClick={downloadTemplate}>Download template</button>
+                </div>
+                <div className="sts-upload-zone" onClick={() => fileRef.current?.click()}>
+                  <input type="file" ref={fileRef} style={{ display: 'none' }} accept=".json" onChange={handleFile} />
+                  <p>{file ? file.name : 'Hitamo fichier JSON'}</p>
+                </div>
+                {uploading && (
+                  <div className="sts-progress">
+                    <div className="sts-progress-bar" style={{ width: `${uploadProgress}%` }} />
+                    <span>Gukora timetable... {uploadProgress}%</span>
+                  </div>
+                )}
+                <div className="sts-actions">
+                  <button type="button" className="sts-btn-primary" onClick={doUpload} disabled={!file || uploading || !selectedClass}>
+                    {uploading ? 'Birimo...' : 'Kora Timetable'}
+                  </button>
+                </div>
+              </>
             )}
           </section>
         )}
@@ -414,10 +731,19 @@ const STS: React.FC = () => {
           <section className="sts-panel">
             <h2>Timetable Preview</h2>
             <div className="sts-actions">
-              <button className="sts-btn-success" onClick={doSave} disabled={saving}>{saving?'Saving...':'Save to Database'}</button>
+              <button className="sts-btn-success" onClick={doSave} disabled={saving}>{saving?'Saving...':'Save Again'}</button>
+              {selectedClass && (
+                <Link className="sts-btn" to={`/admin/timetable/view?classId=${selectedClass}`}>
+                  Reba Full Timetable
+                </Link>
+              )}
               <button className="sts-btn" onClick={()=>doExport('excel')}>Excel</button>
               <button className="sts-btn" onClick={()=>doExport('csv')}>CSV</button>
               <button className="sts-btn" onClick={()=>doExport('pdf')}>PDF</button>
+              <span className="sts-view-toggle">
+                <button type="button" className={previewView==='school'?'active':''} onClick={()=>setPreviewView('school')}>School Grid</button>
+                <button type="button" className={previewView==='cards'?'active':''} onClick={()=>setPreviewView('cards')}>Cards</button>
+              </span>
             </div>
             {generation.conflicts.length > 0 && (
               <div className="sts-conflicts">
@@ -425,48 +751,23 @@ const STS: React.FC = () => {
                 <ul>{generation.conflicts.map((c,i)=><li key={i}>{c}</li>)}</ul>
               </div>
             )}
-            <div className="sts-timetable-wrapper">
-              <table className="sts-timetable">
-                <thead>
-                  <tr><th>Time</th>{DAYS.slice(1,6).map(d=><th key={d}>{d}</th>)}</tr>
-                </thead>
-                <tbody>
-                  {slots.map((slot,si)=>{
-                    if (slot.isBreak) return (
-                      <tr key={si} className="sts-break-row">
-                        <td className="sts-time-cell">{slot.startTime}<br/>{slot.endTime}<br/><small>{slot.label}</small></td>
-                        {Array.from({length:5}).map((_,di)=><td key={di} className="sts-break-cell">{slot.label}</td>)}
-                      </tr>
-                    );
-                    if (slot.isLunch) return (
-                      <tr key={si} className="sts-lunch-row">
-                        <td className="sts-time-cell">{slot.startTime}<br/>{slot.endTime}<br/><small>{slot.label}</small></td>
-                        {Array.from({length:5}).map((_,di)=><td key={di} className="sts-lunch-cell">{slot.label}</td>)}
-                      </tr>
-                    );
-                    return (
-                      <tr key={si}>
-                        <td className="sts-time-cell">{slot.startTime}<br/>{slot.endTime}<br/><small>{slot.label}</small></td>
-                        {grid.map((row,di)=>{
-                          const cell = row[si];
-                          return (
-                            <td key={di} className={`sts-lesson-cell ${cell?'sts-filled':''}`}>
-                              {cell && (
-                                <div>
-                                  <div className="sts-subj">{getSubjectName(cell.subject_id)}</div>
-                                  <div className="sts-teach">{getTeacherName(cell.teacher_id)}</div>
-                                  <div className="sts-room">{getClassroomName(cell.classroom_id)}</div>
-                                </div>
-                              )}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            {previewView === 'cards' && (
+              <TimetableCardsGrid
+                lessons={previewLessons}
+                groupByDay
+                emptyMessage="Nta masomo yabonetse mu timetable."
+                className="mt-4"
+              />
+            )}
+            {previewView === 'school' && (
+              <SchoolTimetableGrid
+                entries={generation.entries}
+                className={generation.className}
+                getSubjectName={getSubjectName}
+                getTeacherName={getTeacherName}
+                getClassroomName={getClassroomName}
+              />
+            )}
           </section>
         )}
 
@@ -538,39 +839,41 @@ const STS: React.FC = () => {
 
       {history.length > 0 && (
         <section className="sts-history">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <h3 style={{ margin: 0 }}>Generation History</h3>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button className="sts-btn" style={{ fontSize: '0.85rem' }} onClick={() => setShowDeleteConfirm('history')}>🗑 Delete History</button>
-              <button className="sts-btn" style={{ fontSize: '0.85rem' }} onClick={() => setShowDeleteConfirm('timetable')}>🗑 Delete Timetable</button>
-              <button className="sts-btn" style={{ fontSize: '0.85rem', background: '#dc3545', color: 'white' }} onClick={() => setShowDeleteConfirm('full')}>⚠ Full Reset</button>
+          <div className="sts-history-header">
+            <h3>Generation History</h3>
+            <div className="sts-history-actions">
+              <button className="sts-btn sts-btn-sm" onClick={() => setShowDeleteConfirm('history')}>Delete History</button>
+              <button className="sts-btn sts-btn-sm" onClick={() => setShowDeleteConfirm('timetable')}>Delete Timetable</button>
+              <button className="sts-btn-sm sts-btn-danger" onClick={() => setShowDeleteConfirm('full')}>Full Reset</button>
             </div>
           </div>
-          <table className="sts-history-table">
-            <thead><tr><th>Date</th><th>Class</th><th>Chronogram</th><th>Entries</th><th>Status</th><th>Action</th></tr></thead>
-            <tbody>
-              {history.slice(0,10).map((h,i)=>{
-                const gen = h.generated_timetable ? JSON.parse(h.generated_timetable) : [];
-                return (
-                  <tr key={i}>
-                    <td>{new Date(h.created_at).toLocaleString()}</td>
-                    <td>{h.class_name}</td>
-                    <td>{h.chronogram_name || 'Manual'}</td>
-                    <td>{Array.isArray(gen)?gen.length:0}</td>
-                    <td><span className={`sts-tag ${h.validation_status==='valid'?'sts-tag-ok':'sts-tag-warn'}`}>{h.validation_status}</span></td>
-                    <td><button className="sts-btn" style={{ fontSize: '0.8rem', padding: '2px 8px' }} onClick={async () => { await smartTimetableApi.deleteHistory(h.id); loadHistory(); }}>✕</button></td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div className="sts-table-wrap">
+            <table className="sts-history-table">
+              <thead><tr><th>Date</th><th>Class</th><th>Chronogram</th><th>Entries</th><th>Status</th><th /></tr></thead>
+              <tbody>
+                {history.slice(0,10).map((h,i)=>{
+                  const gen = h.generated_timetable ? JSON.parse(h.generated_timetable) : [];
+                  return (
+                    <tr key={i}>
+                      <td>{new Date(h.created_at).toLocaleString()}</td>
+                      <td><span className="sts-pill">{h.class_name}</span></td>
+                      <td>{h.chronogram_name || 'Manual'}</td>
+                      <td className="sts-num">{Array.isArray(gen)?gen.length:0}</td>
+                      <td><span className={`sts-tag ${h.validation_status==='valid'?'sts-tag-ok':'sts-tag-warn'}`}>{h.validation_status}</span></td>
+                      <td><button className="sts-btn-icon" title="Delete entry" onClick={async () => { await smartTimetableApi.deleteHistory(h.id); loadHistory(); }}>✕</button></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </section>
       )}
 
       {showDeleteConfirm !== 'none' && (
         <div className="sts-delete-confirm-overlay">
           <div className="sts-delete-confirm">
-            <h3>⚠ Confirm Delete</h3>
+            <h3>Confirm Delete</h3>
             {showDeleteConfirm === 'history' && (
               <p>Are you sure you want to delete <strong>all generation history</strong>?{selectedClass ? ` (for selected class)` : ''} This cannot be undone.</p>
             )}
@@ -578,22 +881,22 @@ const STS: React.FC = () => {
               <p>Are you sure you want to delete <strong>all timetable entries</strong>?{selectedClass ? ` (for selected class)` : ''} This cannot be undone.</p>
             )}
             {showDeleteConfirm === 'full' && (
-              <p>Are you sure you want to <strong>fully reset</strong> the timetable system?{selectedClass ? ` (for selected class)` : ''} This will delete ALL history, timetable entries, and uploads. This cannot be undone.</p>
+              <p>Are you sure you want to <strong>fully reset</strong> the timetable system?{selectedClass ? ` (for selected class)` : ''} This will delete ALL history, timetable entries, and uploads.</p>
             )}
             <div className="sts-delete-confirm-actions">
               <button className="sts-btn" onClick={() => setShowDeleteConfirm('none')}>Cancel</button>
               {showDeleteConfirm === 'history' && (
-                <button className="sts-btn" style={{ background: '#dc3545', color: 'white' }} onClick={doDeleteAllHistory} disabled={deleting}>
+                <button className="sts-btn-danger" onClick={doDeleteAllHistory} disabled={deleting}>
                   {deleting ? 'Deleting...' : 'Delete All History'}
                 </button>
               )}
               {showDeleteConfirm === 'timetable' && (
-                <button className="sts-btn" style={{ background: '#dc3545', color: 'white' }} onClick={doDeleteAllTimetable} disabled={deleting}>
+                <button className="sts-btn-danger" onClick={doDeleteAllTimetable} disabled={deleting}>
                   {deleting ? 'Deleting...' : 'Delete All Timetable'}
                 </button>
               )}
               {showDeleteConfirm === 'full' && (
-                <button className="sts-btn" style={{ background: '#dc3545', color: 'white' }} onClick={doFullReset} disabled={deleting}>
+                <button className="sts-btn-danger" onClick={doFullReset} disabled={deleting}>
                   {deleting ? 'Resetting...' : 'Full Reset'}
                 </button>
               )}

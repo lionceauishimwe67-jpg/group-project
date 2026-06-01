@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { query } from '../config/database';
+import { query, run } from '../config/database';
 import { asyncHandler } from '../middleware/errorHandler';
 
 // Register device token for a teacher
@@ -178,7 +178,7 @@ export const getNotificationHistory = asyncHandler(async (req: Request, res: Res
 
 // Send test notification
 export const sendTestNotification = asyncHandler(async (req: Request, res: Response) => {
-  const { teacherId } = req.body;
+  const { teacherId, via = 'all' } = req.body;
 
   if (!teacherId) {
     return res.status(400).json({
@@ -187,7 +187,7 @@ export const sendTestNotification = asyncHandler(async (req: Request, res: Respo
     });
   }
 
-  const teachers = await query<any[]>('SELECT id, name FROM teachers WHERE id = ?', [teacherId]);
+  const teachers = await query<any[]>('SELECT id, name, phone FROM teachers WHERE id = ?', [teacherId]);
 
   if (teachers.length === 0) {
     return res.status(404).json({
@@ -198,29 +198,30 @@ export const sendTestNotification = asyncHandler(async (req: Request, res: Respo
 
   const teacher = teachers[0];
 
-  // Import notification service
-  const { sendNotificationToTeacher } = await import('../services/notificationService');
-
-  const result = await sendNotificationToTeacher(
-    teacherId,
-    'Test Notification',
-    `This is a test notification for ${teacher.name}. If you received this, push notifications are working!`,
-    0, // Dummy timetable ID for test
-    'class_reminder'
-  );
-
-  if (result.success) {
-    return res.json({
-      success: true,
-      message: 'Test notification sent successfully',
-      data: result
-    });
-  } else {
-    return res.status(500).json({
-      success: false,
-      error: result.error || 'Failed to send test notification'
-    });
+  // Send push test
+  if (via === 'all' || via === 'push') {
+    const { sendNotificationToTeacher } = await import('../services/notificationService');
+    await sendNotificationToTeacher(
+      teacherId,
+      '✅ Test Notification',
+      `Mwarimu ${teacher.name}: Iyi ni test y'itumanaho. Niba ubonye ubu butumwa, push notification ikora neza!`,
+      0, 'class_reminder'
+    );
   }
+
+  // Send SMS test
+  if (via === 'all' || via === 'sms') {
+    const { sendSMSNotificationToTeacher } = await import('../services/smsService');
+    await sendSMSNotificationToTeacher(
+      teacherId,
+      `✅ Test: Mwarimu ${teacher.name}, ubu butumwa bugaragaza ko SMS ikora neza.`
+    );
+  }
+
+  return res.json({
+    success: true,
+    message: 'Test notifications sent successfully'
+  });
 });
 
 // Get teacher notification preferences
@@ -265,6 +266,72 @@ export const getNotificationPreferences = asyncHandler(async (req: Request, res:
   return res.json({
     success: true,
     data: teacherData
+  });
+});
+
+// Mark a notification as read
+export const markNotificationAsRead = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  await run(
+    `UPDATE notifications SET is_read = 1, read_at = datetime('now') WHERE id = ?`,
+    [id]
+  );
+
+  return res.json({ success: true, message: 'Notification marked as read' });
+});
+
+// Get notification status for all teachers (admin view)
+export const getAllTeachersNotificationStatus = asyncHandler(async (req: Request, res: Response) => {
+  const { limit = '50', offset = '0', teacher_id } = req.query;
+
+  const params: any[] = [];
+  let whereSql = '';
+  if (teacher_id) {
+    whereSql = 'WHERE n.teacher_id = ?';
+    params.push(Number(teacher_id));
+  }
+
+  const sql = `SELECT n.id, n.teacher_id, n.notification_type, n.title, n.body,
+      n.status, n.sent_via, n.sent_at, n.is_read, n.read_at, n.created_at,
+      t.name AS teacher_name,
+      c.name AS class_name, s.name AS subject_name
+    FROM notifications n
+    LEFT JOIN teachers t ON n.teacher_id = t.id
+    LEFT JOIN timetable tt ON n.timetable_id = tt.id
+    LEFT JOIN classes c ON tt.class_id = c.id
+    LEFT JOIN subjects s ON tt.subject_id = s.id
+    ${whereSql}
+    ORDER BY COALESCE(n.created_at, n.sent_at) DESC
+    LIMIT ? OFFSET ?`;
+
+  params.push(Number(limit), Number(offset));
+
+  const notifications = await query<any[]>(sql, params);
+
+  const teachersMap = new Map<number, { teacher: any; notifications: any[]; summary: { total: number; read: number; unread: number } }>();
+
+  for (const n of notifications) {
+    if (!teachersMap.has(n.teacher_id)) {
+      teachersMap.set(n.teacher_id, {
+        teacher: { id: n.teacher_id, name: n.teacher_name },
+        notifications: [],
+        summary: { total: 0, read: 0, unread: 0 }
+      });
+    }
+    const entry = teachersMap.get(n.teacher_id)!;
+    entry.notifications.push(n);
+    entry.summary.total++;
+    if (n.is_read) entry.summary.read++;
+    else entry.summary.unread++;
+  }
+
+  const totalCount = await query<any[]>('SELECT COUNT(*) as count FROM notifications');
+
+  return res.json({
+    success: true,
+    data: Array.from(teachersMap.values()),
+    meta: { total: totalCount[0]?.count || 0, count: notifications.length }
   });
 });
 

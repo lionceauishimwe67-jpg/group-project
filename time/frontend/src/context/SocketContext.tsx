@@ -10,6 +10,7 @@ interface SocketContextType {
   bellTriggered: boolean;
   bellData: any;
   announcementUpdated: number;
+  timetableUpdated: number;
   dayEnded: any;
   dayReset: any;
   joinManagerRoom: () => void;
@@ -24,6 +25,7 @@ const SocketContext = createContext<SocketContextType>({
   bellTriggered: false,
   bellData: null,
   announcementUpdated: 0,
+  timetableUpdated: 0,
   dayEnded: null,
   dayReset: null,
   joinManagerRoom: () => {},
@@ -40,15 +42,17 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [bellTriggered, setBellTriggered] = useState(false);
   const [bellData, setBellData] = useState<any>(null);
   const [announcementUpdated, setAnnouncementUpdated] = useState(0);
+  const [timetableUpdated, setTimetableUpdated] = useState(0);
   const [dayEnded, setDayEnded] = useState<any>(null);
   const [dayReset, setDayReset] = useState<any>(null);
 
   useEffect(() => {
     const socketInstance = io(API_ORIGIN, {
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],
       reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
+      reconnectionAttempts: 8,
+      reconnectionDelay: 2000,
+      timeout: 15000,
     });
 
     socketInstance.on('connect', () => {
@@ -57,8 +61,19 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
 
     socketInstance.on('disconnect', () => {
-      console.log('Socket disconnected');
       setConnected(false);
+    });
+
+    socketInstance.on('connect_error', (err) => {
+      setConnected(false);
+      if (process.env.NODE_ENV === 'development') {
+        console.warn(
+          '[Socket] Cannot reach backend at',
+          API_ORIGIN,
+          '— start API with: cd backend && npm run dev',
+          err.message
+        );
+      }
     });
 
     socketInstance.on('current-session', (session) => {
@@ -92,6 +107,11 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     socketInstance.on('announcement-updated', (data) => {
       console.log('Announcement updated:', data);
       setAnnouncementUpdated(prev => prev + 1);
+    });
+
+    socketInstance.on('timetable-updated', (data) => {
+      console.log('Timetable updated:', data);
+      setTimetableUpdated(prev => prev + 1);
     });
 
     socketInstance.on('day-ended', (data) => {
@@ -133,6 +153,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         bellTriggered,
         bellData,
         announcementUpdated,
+        timetableUpdated,
         dayEnded,
         dayReset,
         joinManagerRoom,

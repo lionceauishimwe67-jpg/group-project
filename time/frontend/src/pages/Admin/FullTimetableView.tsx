@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { timetableApi } from '../../services/api';
 import { TimetableEntry } from '../../types';
+import { TimetableCardsGrid, flattenWeeklyToLessons } from '../../components/TimetableCards';
+import { SchoolTimetableGrid } from '../../components/SchoolTimetableGrid';
+import { normalizeTime } from '../../utils/timetableSlotMatch';
 import './FullTimetableView.css';
 
 // Session types for color coding
@@ -70,8 +74,9 @@ const TimetableGrid: React.FC<{
   };
 
   const getEntryForSlot = (day: number, timeSlot: string, className: string): TimetableEntry | null => {
-    const dayEntries = weeklyData[day] || [];
-    return dayEntries.find(entry => entry.start_time === timeSlot && entry.class_name === className) || null;
+    const dayEntries = (weeklyData[day] || []).filter((e) => e.class_name === className);
+    const slotNorm = normalizeTime(timeSlot);
+    return dayEntries.find((entry) => normalizeTime(entry.start_time) === slotNorm) || null;
   };
 
   const isCurrentSession = (entry: TimetableEntry): boolean => {
@@ -113,6 +118,7 @@ const TimetableGrid: React.FC<{
 };
 
 const FullTimetableView: React.FC = () => {
+  const [searchParams] = useSearchParams();
   const [weeklyData, setWeeklyData] = useState<Record<number, TimetableEntry[]>>({
     0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: []
   });
@@ -124,6 +130,7 @@ const FullTimetableView: React.FC = () => {
   const [selectedTeacher, setSelectedTeacher] = useState<number | ''>('');
   const [selectedSubject, setSelectedSubject] = useState<number | ''>('');
   const [viewMode, setViewMode] = useState<'weekly' | 'daily'>('weekly');
+  const [layoutMode, setLayoutMode] = useState<'school' | 'grid' | 'cards'>('school');
   const [selectedDay, setSelectedDay] = useState<number>(1);
 
   const daysOfWeek = [
@@ -137,8 +144,15 @@ const FullTimetableView: React.FC = () => {
   ];
 
   const timeSlots = [
-    '08:10', '08:50', '09:30', '10:10', '10:25', '11:05', '11:45', '12:25', '13:30', '14:10', '14:50', '15:30', '15:40', '16:20', '17:00'
+    '07:50', '08:10', '08:50', '09:30', '10:10', '10:25', '11:05', '11:45', '12:25', '13:30', '14:10', '14:50', '15:30', '15:40', '16:20', '17:00',
   ];
+
+  useEffect(() => {
+    const classIdParam = searchParams.get('classId');
+    if (classIdParam) {
+      setSelectedClass(Number(classIdParam));
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     loadData();
@@ -173,30 +187,32 @@ const FullTimetableView: React.FC = () => {
         timetableApi.getReferenceData(),
       ]);
 
-      setWeeklyData(weeklyRes.data.data);
       setReferenceData(refRes.data.data);
-      
-      // Filter by teacher if selected
-      if (selectedTeacher) {
-        const filtered: Record<number, TimetableEntry[]> = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
-        Object.keys(weeklyRes.data.data).forEach(day => {
-          filtered[Number(day)] = weeklyRes.data.data[Number(day)].filter(
-            (entry: TimetableEntry) => entry.teacher_id === Number(selectedTeacher)
-          );
-        });
-        setWeeklyData(filtered);
-      }
+
+      let dataToShow = weeklyRes.data.data;
 
       // Filter by subject if selected
       if (selectedSubject) {
         const filtered: Record<number, TimetableEntry[]> = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
-        Object.keys(weeklyData).forEach(day => {
-          filtered[Number(day)] = weeklyData[Number(day)].filter(
+        Object.keys(dataToShow).forEach((day) => {
+          filtered[Number(day)] = dataToShow[Number(day)].filter(
             (entry: TimetableEntry) => entry.subject_id === Number(selectedSubject)
           );
         });
-        setWeeklyData(filtered);
+        dataToShow = filtered;
       }
+
+      if (selectedTeacher) {
+        const filtered: Record<number, TimetableEntry[]> = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
+        Object.keys(dataToShow).forEach((day) => {
+          filtered[Number(day)] = dataToShow[Number(day)].filter(
+            (entry: TimetableEntry) => entry.teacher_id === Number(selectedTeacher)
+          );
+        });
+        dataToShow = filtered;
+      }
+
+      setWeeklyData(dataToShow);
     } catch (err: any) {
       setError(err.message || 'Failed to load timetable');
     } finally {
@@ -219,6 +235,33 @@ const FullTimetableView: React.FC = () => {
     }, {}) || {};
   }, [referenceData]);
 
+  const cardLessons = useMemo(() => {
+    const day = viewMode === 'weekly' ? selectedDay : new Date().getDay();
+    return flattenWeeklyToLessons(weeklyData, day);
+  }, [weeklyData, selectedDay, viewMode]);
+
+  const flatEntries = useMemo(() => {
+    const rows: TimetableEntry[] = [];
+    Object.values(weeklyData).forEach((arr) => rows.push(...arr));
+    return rows;
+  }, [weeklyData]);
+
+  const selectedClassName = useMemo(() => {
+    if (!selectedClass || !referenceData?.classes) return '';
+    const cls = referenceData.classes.find((c: { id: number; name: string }) => c.id === selectedClass);
+    return cls?.name || '';
+  }, [selectedClass, referenceData]);
+
+  const totalEntries = useMemo(
+    () => Object.values(weeklyData).reduce((sum, entries) => sum + entries.length, 0),
+    [weeklyData]
+  );
+
+  const currentSessionIds = useMemo(
+    () => new Set(currentSessions.map((s) => s.id)),
+    [currentSessions]
+  );
+
   if (loading) return <div className="timetable-view-loading">Loading timetable...</div>;
 
   if (error) return <div className="timetable-view-error">Error: {error}</div>;
@@ -227,6 +270,9 @@ const FullTimetableView: React.FC = () => {
     <div className="full-timetable-view">
       <div className="timetable-view-header">
         <h1>Full Timetable View</h1>
+        <button onClick={() => window.print()} className="btn-print" style={{ marginRight: 16, padding: '8px 16px', background: '#10b981', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem' }}>
+          🖨️ Print
+        </button>
         <div className="view-controls">
           <button
             className={`view-mode-btn ${viewMode === 'weekly' ? 'active' : ''}`}
@@ -239,6 +285,24 @@ const FullTimetableView: React.FC = () => {
             onClick={() => setViewMode('daily')}
           >
             Daily View
+          </button>
+          <button
+            className={`view-mode-btn ${layoutMode === 'school' ? 'active' : ''}`}
+            onClick={() => setLayoutMode('school')}
+          >
+            School Grid
+          </button>
+          <button
+            className={`view-mode-btn ${layoutMode === 'grid' ? 'active' : ''}`}
+            onClick={() => setLayoutMode('grid')}
+          >
+            By Class
+          </button>
+          <button
+            className={`view-mode-btn ${layoutMode === 'cards' ? 'active' : ''}`}
+            onClick={() => setLayoutMode('cards')}
+          >
+            Cards
           </button>
         </div>
       </div>
@@ -288,7 +352,24 @@ const FullTimetableView: React.FC = () => {
         </div>
       </div>
 
-      {viewMode === 'weekly' ? (
+      {!loading && totalEntries === 0 && (
+        <div className="timetable-view-empty">
+          <p>Nta timetable iboneka mu database.</p>
+          <p className="timetable-view-empty-hint">
+            Kora timetable kuri <Link to="/admin/smart-timetable">Smart Timetable</Link> — izabikwa automatically nyuma yo gukora.
+            {selectedClass ? ' Cyangwa hitamo class itandukanye.' : ' Hitamo class cyangwa reba All Classes.'}
+          </p>
+        </div>
+      )}
+
+      {viewMode === 'weekly' && layoutMode === 'school' && totalEntries > 0 ? (
+        <div className="ftv-school-grid-wrap">
+          <SchoolTimetableGrid
+            entries={flatEntries}
+            className={selectedClassName || (flatEntries[0]?.class_name ?? '')}
+          />
+        </div>
+      ) : viewMode === 'weekly' ? (
         <div className="weekly-timetable">
           <div className="day-selector">
             {daysOfWeek.map(day => (
@@ -302,13 +383,25 @@ const FullTimetableView: React.FC = () => {
             ))}
           </div>
 
-          <TimetableGrid
-            weeklyData={weeklyData}
-            timeSlots={timeSlots}
-            daysOfWeek={daysOfWeek}
-            selectedDay={selectedDay}
-            currentSessions={currentSessions}
-          />
+          {layoutMode === 'cards' ? (
+            <TimetableCardsGrid
+              lessons={cardLessons.map((lesson) => ({
+                ...lesson,
+                isNow: lesson.id != null && currentSessionIds.has(Number(lesson.id)),
+              }))}
+              groupByDay={false}
+              emptyMessage="No lessons for this day."
+              className="ftv-cards"
+            />
+          ) : (
+            <TimetableGrid
+              weeklyData={weeklyData}
+              timeSlots={timeSlots}
+              daysOfWeek={daysOfWeek}
+              selectedDay={selectedDay}
+              currentSessions={currentSessions}
+            />
+          )}
         </div>
       ) : (
         <div className="daily-timetable">
@@ -326,27 +419,39 @@ const FullTimetableView: React.FC = () => {
 
           <div className="daily-schedule">
             <h2>{daysOfWeek.find(d => d.value === selectedDay)?.label}</h2>
-            <div className="daily-list">
-              {weeklyData[selectedDay]?.length > 0 ? (
-                weeklyData[selectedDay].map((entry, index) => (
-                  <div key={entry.id} className="daily-entry">
-                    <div className="entry-time">
-                      <span className="start-time">{entry.start_time}</span>
-                      <span className="time-separator">-</span>
-                      <span className="end-time">{entry.end_time}</span>
+            {layoutMode === 'cards' ? (
+              <TimetableCardsGrid
+                lessons={cardLessons.map((lesson) => ({
+                  ...lesson,
+                  isNow: lesson.id != null && currentSessionIds.has(Number(lesson.id)),
+                }))}
+                groupByDay={false}
+                emptyMessage="No classes scheduled for this day"
+                className="ftv-cards"
+              />
+            ) : (
+              <div className="daily-list">
+                {weeklyData[selectedDay]?.length > 0 ? (
+                  weeklyData[selectedDay].map((entry) => (
+                    <div key={entry.id} className="daily-entry">
+                      <div className="entry-time">
+                        <span className="start-time">{entry.start_time}</span>
+                        <span className="time-separator">-</span>
+                        <span className="end-time">{entry.end_time}</span>
+                      </div>
+                      <div className="entry-details">
+                        <div className="entry-class">{entry.class_name}</div>
+                        <div className="entry-subject">{entry.subject_name}</div>
+                        <div className="entry-teacher">Teacher: {entry.teacher_name}</div>
+                        <div className="entry-room">Room: {entry.classroom_name}</div>
+                      </div>
                     </div>
-                    <div className="entry-details">
-                      <div className="entry-class">{entry.class_name}</div>
-                      <div className="entry-subject">{entry.subject_name}</div>
-                      <div className="entry-teacher">Teacher: {entry.teacher_name}</div>
-                      <div className="entry-room">Room: {entry.classroom_name}</div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="no-classes">No classes scheduled for this day</div>
-              )}
-            </div>
+                  ))
+                ) : (
+                  <div className="no-classes">No classes scheduled for this day</div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

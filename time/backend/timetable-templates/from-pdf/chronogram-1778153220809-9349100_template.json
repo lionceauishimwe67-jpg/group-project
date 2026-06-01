@@ -1,0 +1,49 @@
+{
+  "days": [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday"
+  ],
+  "classes": [
+    {
+      "id": 0,
+      "name": "QUALIFICATION TITLE",
+      "level": "QU",
+      "students": 40
+    }
+  ],
+  "subjects": [
+    {
+      "name": "ICT",
+      "teacher": "Eric Niyonzima",
+      "hours_per_week": 2,
+      "availability": "Full Day"
+    },
+    {
+      "name": "Software Development",
+      "teacher": "USANASE Ange",
+      "hours_per_week": 4,
+      "availability": "Full Day"
+    }
+  ],
+  "rules": [
+    "A teacher cannot teach two classes at the same time",
+    "Subject hours must match weekly requirements",
+    "Avoid repeating the same subject more than 2 times in one day",
+    "Teachers must follow availability constraints",
+    "Every class must have a balanced schedule",
+    "Core subjects (Math, English, Physics) should be in morning slots",
+    "Break times must be respected"
+  ],
+  "time_slots": [
+    "08:00-09:00",
+    "09:00-10:00",
+    "10:30-11:30",
+    "11:30-12:30",
+    "13:30-14:30",
+    "14:30-15:30"
+  ],
+  "classId": 0
+}

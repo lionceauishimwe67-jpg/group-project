@@ -12,6 +12,7 @@ const char* password = "muhura@123";
 const char* backendUrl = "http://192.168.0.230:5000"; // Change this to your backend IP/port
 const char* scheduleEndpoint = "/api/hardware/schedule";
 const char* ringCommandEndpoint = "/api/hardware/ring-command";
+const char* legacyRingCommandEndpoint = "/api/bell/ring-now";
 const char* heartbeatEndpoint = "/api/hardware/heartbeat";
 const char* deviceId = "mhbell-esp32";
 const unsigned long SCHEDULE_REFRESH_INTERVAL_MS = 12UL * 60UL * 60UL * 1000UL;
@@ -21,7 +22,10 @@ unsigned long lastScheduleFetch = 0;
 unsigned long lastManualRingPoll = 0;
 unsigned long lastHeartbeat = 0;
 bool backendScheduleLoaded = false;
-String backendBellTimes[32];
+bool dashboardScheduleSynced = false;
+String backendBellTimes[64];
+String backendBellLabels[64];
+int backendBellDurations[64];
 int backendBellCount = 0;
 String currentDateString = "";
 String lastCommandId = "";
@@ -128,6 +132,8 @@ bool fetchBellSchedule() {
 
   if (httpCode != HTTP_CODE_OK) {
     http.end();
+    dashboardScheduleSynced = false;
+    backendScheduleLoaded = false;
     return false;
   }
 
@@ -139,10 +145,14 @@ bool fetchBellSchedule() {
   if (error) {
     Serial.print("JSON parse failed: ");
     Serial.println(error.c_str());
+    dashboardScheduleSynced = false;
+    backendScheduleLoaded = false;
     return false;
   }
 
   if (!doc["success"] || !doc["data"].is<JsonArray>()) {
+    dashboardScheduleSynced = false;
+    backendScheduleLoaded = false;
     return false;
   }
 
@@ -150,7 +160,7 @@ bool fetchBellSchedule() {
   backendBellCount = 0;
 
   for (JsonObject item : array) {
-    if (backendBellCount >= 32) {
+    if (backendBellCount >= 64) {
       break;
     }
 
@@ -161,17 +171,21 @@ bool fetchBellSchedule() {
 
     String timeString = normalizeBackendTime(String(timeValue));
     if (timeString.length() == 8) {
-      backendBellTimes[backendBellCount++] = timeString;
+      backendBellTimes[backendBellCount] = timeString;
+      backendBellLabels[backendBellCount] = item["label"] | "Dashboard Bell";
+      backendBellDurations[backendBellCount] = item["duration_seconds"] | 15;
+      backendBellCount++;
     }
   }
 
+  dashboardScheduleSynced = true;
   backendScheduleLoaded = backendBellCount > 0;
   lastScheduleFetch = millis();
 
   Serial.print("Backend schedule fetched: ");
   Serial.println(backendBellCount);
 
-  return backendScheduleLoaded;
+  return true;
 }
 
 bool shouldRefreshSchedule() {
@@ -205,13 +219,13 @@ void sendHeartbeat() {
   lastHeartbeat = millis();
 }
 
-bool pollHardwareRingCommand(String& reason) {
+bool pollHardwareRingCommandAt(const char* endpoint, String& reason) {
   if (WiFi.status() != WL_CONNECTED) {
     return false;
   }
 
   HTTPClient http;
-  String url = String(backendUrl) + String(ringCommandEndpoint);
+  String url = String(backendUrl) + String(endpoint);
   http.begin(url);
   int httpCode = http.GET();
 
@@ -256,6 +270,14 @@ bool pollHardwareRingCommand(String& reason) {
   reason = "Manual Ring";
   pendingBellDurationSeconds = 15;
   return true;
+}
+
+bool pollHardwareRingCommand(String& reason) {
+  if (pollHardwareRingCommandAt(ringCommandEndpoint, reason)) {
+    return true;
+  }
+
+  return pollHardwareRingCommandAt(legacyRingCommandEndpoint, reason);
 }
 
 void printBoth(String l1, String l2);
@@ -479,11 +501,14 @@ void checkBell() {
   EEPROM.get(ADDR_VAC_DATE, vacancyDatePeriod);
   String nowTime = formatCurrentTime();
 
-  if (backendScheduleLoaded) {
+  if (dashboardScheduleSynced) {
     for (int i = 0; i < backendBellCount; i++) {
       if (backendBellTimes[i] == nowTime && seconds == 0) {
         if (markRingIfNew()) {
-          ringBell("Backend Bell");
+          pendingBellDurationSeconds = backendBellDurations[i];
+          if (pendingBellDurationSeconds < 1) pendingBellDurationSeconds = 1;
+          if (pendingBellDurationSeconds > 60) pendingBellDurationSeconds = 60;
+          ringBell(backendBellLabels[i]);
         }
         break;
       }
